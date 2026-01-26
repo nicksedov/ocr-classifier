@@ -93,11 +93,11 @@ curl -X POST \
   http://localhost:8080/classify
 ```
 
-**Пример с тестовым изображением:**
+**Пример c изображением из датасета:**
 
 ```bash
 curl -X POST \
   -H "Content-Type: image/jpeg" \
-  --data-binary @test/resources/text.jpg \
+  --data-binary @test/dataset/text-deutch.jpg \
   http://localhost:8080/classify
 ```
