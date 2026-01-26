@@ -37,9 +37,9 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 
 	// Check content type
 	contentType := r.Header.Get("Content-Type")
-	if contentType != "image/jpeg" {
+	if contentType != "image/jpeg" && contentType != "image/png" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "content-type must be image/jpeg"})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "content-type must be image/jpeg or image/png"})
 		return
 	}
 
