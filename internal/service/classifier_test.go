@@ -29,6 +29,8 @@ func TestClassifierDataset(t *testing.T) {
 		file          string
 		confidenceEng float64
 		confidenceRus float64
+		angleEng      int
+		angleRus      int
 		err           error
 	}
 
@@ -98,6 +100,8 @@ func TestClassifierDataset(t *testing.T) {
 					file:          j.relPath,
 					confidenceEng: resEng.Confidence,
 					confidenceRus: resRus.Confidence,
+					angleEng:      resEng.Angle,
+					angleRus:      resRus.Angle,
 				}
 			}
 		}()
@@ -132,19 +136,19 @@ func TestClassifierDataset(t *testing.T) {
 
 	// Print results table
 	fmt.Println()
-	fmt.Println(strings.Repeat("=", 75))
-	fmt.Printf("%-40s | %-12s | %-12s\n", "File", "English", "Russian")
-	fmt.Println(strings.Repeat("-", 75))
+	fmt.Println(strings.Repeat("=", 95))
+	fmt.Printf("%-30s | %-12s | %-6s | %-12s | %-6s\n", "File", "English", "Angle", "Russian", "Angle")
+	fmt.Println(strings.Repeat("-", 95))
 
 	for _, r := range results {
 		if r.err != nil {
-			fmt.Printf("%-40s | ERROR: %v\n", r.file, r.err)
+			fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
 		} else {
-			fmt.Printf("%-40s | %-12.4f | %-12.4f\n", r.file, r.confidenceEng, r.confidenceRus)
+			fmt.Printf("%-30s | %-12.4f | %-6d | %-12.4f | %-6d\n", r.file, r.confidenceEng, r.angleEng, r.confidenceRus, r.angleRus)
 		}
 	}
 
-	fmt.Println(strings.Repeat("=", 75))
+	fmt.Println(strings.Repeat("=", 95))
 	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
 	fmt.Println()
 
@@ -180,6 +184,7 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	fmt.Println(strings.Repeat("=", 90))
 	fmt.Printf("Bounding Boxes for: %s\n", testImage)
 	fmt.Printf("Overall Confidence: %.4f\n", result.Confidence)
+	fmt.Printf("Best Rotation Angle: %d\n", result.Angle)
 	fmt.Printf("Total Boxes Found: %d\n", len(result.Boxes))
 	fmt.Println(strings.Repeat("-", 90))
 	fmt.Printf("%-5s | %-20s | %-8s | %-8s | %-8s | %-8s | %-10s\n",

@@ -21,6 +21,7 @@ func NewClassifyHandler() *ClassifyHandler {
 type ClassifyResponse struct {
 	Confidence float64               `json:"confidence"`
 	Boxes      []service.BoundingBox `json:"boxes"`
+	Angle      int                   `json:"angle"`
 }
 
 type ErrorResponse struct {
@@ -84,5 +85,6 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ClassifyResponse{
 		Confidence: result.Confidence,
 		Boxes:      result.Boxes,
+		Angle:      result.Angle,
 	})
 }
