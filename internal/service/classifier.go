@@ -4,6 +4,13 @@ import (
 	"github.com/otiai10/gosseract/v2"
 )
 
+// Supported languages for OCR
+var SupportedLanguages = map[string]bool{
+	"eng": true, // English
+	"rus": true, // Russian
+	"deu": true, // German
+}
+
 type ClassifierResult struct {
 	Confidence float64 `json:"confidence"`
 }
@@ -14,9 +21,17 @@ func NewClassifier() *Classifier {
 	return &Classifier{}
 }
 
-func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
+func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
 	defer client.Close()
+
+	// Set language for OCR (default to English if not specified)
+	if lang == "" {
+		lang = "eng"
+	}
+	if err := client.SetLanguage(lang); err != nil {
+		return nil, err
+	}
 
 	if err := client.SetImageFromBytes(imageData); err != nil {
 		return nil, err

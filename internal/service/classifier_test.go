@@ -54,7 +54,7 @@ func TestClassifierDataset(t *testing.T) {
 		}
 
 		// Classify
-		res, err := classifier.DetectText(imageData)
+		res, err := classifier.DetectText(imageData, "eng")
 		if err != nil {
 			results = append(results, result{file: path, err: err})
 			errorCount++

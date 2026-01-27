@@ -25,7 +25,7 @@ func main() {
 	// 5. Start HTTP server
 	addr := ":" + cfg.Port
 	fmt.Printf("Starting server on %s...\n", addr)
-	
+
 	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
