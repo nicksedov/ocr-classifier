@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-const defaultWorkers = 10
+const defaultWorkers = 5
 
 func TestClassifierDataset(t *testing.T) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset")
