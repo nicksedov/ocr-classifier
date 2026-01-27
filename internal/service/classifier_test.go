@@ -19,9 +19,10 @@ func TestClassifierDataset(t *testing.T) {
 	classifier := NewClassifier()
 
 	type result struct {
-		file       string
-		confidence float64
-		err        error
+		file          string
+		confidenceEng float64
+		confidenceRus float64
+		err           error
 	}
 
 	var results []result
@@ -53,16 +54,29 @@ func TestClassifierDataset(t *testing.T) {
 			return nil
 		}
 
-		// Classify
-		res, err := classifier.DetectText(imageData, "eng")
-		if err != nil {
-			results = append(results, result{file: path, err: err})
+		relPath, _ := filepath.Rel(datasetPath, path)
+
+		// Classify with English
+		resEng, errEng := classifier.DetectText(imageData, "eng")
+		if errEng != nil {
+			results = append(results, result{file: relPath, err: errEng})
 			errorCount++
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(datasetPath, path)
-		results = append(results, result{file: relPath, confidence: res.Confidence})
+		// Classify with Russian
+		resRus, errRus := classifier.DetectText(imageData, "rus")
+		if errRus != nil {
+			results = append(results, result{file: relPath, err: errRus})
+			errorCount++
+			return nil
+		}
+
+		results = append(results, result{
+			file:          relPath,
+			confidenceEng: resEng.Confidence,
+			confidenceRus: resRus.Confidence,
+		})
 		processedCount++
 
 		return nil
@@ -74,19 +88,19 @@ func TestClassifierDataset(t *testing.T) {
 
 	// Print results table
 	fmt.Println()
-	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("%-40s | %s\n", "File", "Confidence")
-	fmt.Println(strings.Repeat("-", 60))
+	fmt.Println(strings.Repeat("=", 75))
+	fmt.Printf("%-40s | %-12s | %-12s\n", "File", "English", "Russian")
+	fmt.Println(strings.Repeat("-", 75))
 
 	for _, r := range results {
 		if r.err != nil {
 			fmt.Printf("%-40s | ERROR: %v\n", r.file, r.err)
 		} else {
-			fmt.Printf("%-40s | %.4f\n", r.file, r.confidence)
+			fmt.Printf("%-40s | %-12.4f | %-12.4f\n", r.file, r.confidenceEng, r.confidenceRus)
 		}
 	}
 
-	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println(strings.Repeat("=", 75))
 	fmt.Printf("Total files: %d, Processed: %d, Errors: %d\n", len(results), processedCount, errorCount)
 	fmt.Println()
 
