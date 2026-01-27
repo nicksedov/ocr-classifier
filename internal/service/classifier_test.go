@@ -4,9 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 )
+
+const defaultWorkers = 10
 
 func TestClassifierDataset(t *testing.T) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset")
@@ -16,7 +20,10 @@ func TestClassifierDataset(t *testing.T) {
 		t.Fatalf("Dataset directory does not exist: %s", datasetPath)
 	}
 
-	classifier := NewClassifier()
+	type job struct {
+		path    string
+		relPath string
+	}
 
 	type result struct {
 		file          string
@@ -25,66 +32,103 @@ func TestClassifierDataset(t *testing.T) {
 		err           error
 	}
 
-	var results []result
-	var processedCount int
-	var errorCount int
-
-	// Walk through all files in the dataset directory
+	// Collect all image files
+	var jobs []job
 	err := filepath.Walk(datasetPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-
-		// Skip directories
 		if info.IsDir() {
 			return nil
 		}
-
-		// Process only image files
 		ext := strings.ToLower(filepath.Ext(path))
 		if ext != ".jpg" && ext != ".jpeg" && ext != ".png" {
 			return nil
 		}
-
-		// Read file
-		imageData, err := os.ReadFile(path)
-		if err != nil {
-			results = append(results, result{file: path, err: err})
-			errorCount++
-			return nil
-		}
-
 		relPath, _ := filepath.Rel(datasetPath, path)
-
-		// Classify with English
-		resEng, errEng := classifier.DetectText(imageData, "eng")
-		if errEng != nil {
-			results = append(results, result{file: relPath, err: errEng})
-			errorCount++
-			return nil
-		}
-
-		// Classify with Russian
-		resRus, errRus := classifier.DetectText(imageData, "rus")
-		if errRus != nil {
-			results = append(results, result{file: relPath, err: errRus})
-			errorCount++
-			return nil
-		}
-
-		results = append(results, result{
-			file:          relPath,
-			confidenceEng: resEng.Confidence,
-			confidenceRus: resRus.Confidence,
-		})
-		processedCount++
-
+		jobs = append(jobs, job{path: path, relPath: relPath})
 		return nil
 	})
 
 	if err != nil {
 		t.Fatalf("Error walking dataset directory: %v", err)
 	}
+
+	if len(jobs) == 0 {
+		t.Fatal("No image files found in the dataset directory")
+	}
+
+	// Channels for worker pool
+	jobsChan := make(chan job, len(jobs))
+	resultsChan := make(chan result, len(jobs))
+
+	// Start workers
+	var wg sync.WaitGroup
+	numWorkers := defaultWorkers
+	if len(jobs) < numWorkers {
+		numWorkers = len(jobs)
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			classifier := NewClassifier()
+
+			for j := range jobsChan {
+				imageData, err := os.ReadFile(j.path)
+				if err != nil {
+					resultsChan <- result{file: j.relPath, err: err}
+					continue
+				}
+
+				resEng, errEng := classifier.DetectText(imageData, "eng")
+				if errEng != nil {
+					resultsChan <- result{file: j.relPath, err: errEng}
+					continue
+				}
+
+				resRus, errRus := classifier.DetectText(imageData, "rus")
+				if errRus != nil {
+					resultsChan <- result{file: j.relPath, err: errRus}
+					continue
+				}
+
+				resultsChan <- result{
+					file:          j.relPath,
+					confidenceEng: resEng.Confidence,
+					confidenceRus: resRus.Confidence,
+				}
+			}
+		}()
+	}
+
+	// Send jobs to workers
+	for _, j := range jobs {
+		jobsChan <- j
+	}
+	close(jobsChan)
+
+	// Wait for all workers to finish
+	wg.Wait()
+	close(resultsChan)
+
+	// Collect results
+	var results []result
+	var processedCount, errorCount int
+	for r := range resultsChan {
+		results = append(results, r)
+		if r.err != nil {
+			errorCount++
+		} else {
+			processedCount++
+		}
+	}
+
+	// Sort results by filename for consistent output
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].file < results[j].file
+	})
 
 	// Print results table
 	fmt.Println()
@@ -101,13 +145,8 @@ func TestClassifierDataset(t *testing.T) {
 	}
 
 	fmt.Println(strings.Repeat("=", 75))
-	fmt.Printf("Total files: %d, Processed: %d, Errors: %d\n", len(results), processedCount, errorCount)
+	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
 	fmt.Println()
-
-	// Test fails if there were any errors or no files were processed
-	if len(results) == 0 {
-		t.Fatal("No image files found in the dataset directory")
-	}
 
 	if errorCount > 0 {
 		t.Fatalf("Failed to calculate confidence for %d file(s)", errorCount)
