@@ -11,8 +11,18 @@ var SupportedLanguages = map[string]bool{
 	"deu": true, // German
 }
 
-type ClassifierResult struct {
+type BoundingBox struct {
+	X          int     `json:"x"`
+	Y          int     `json:"y"`
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	Word       string  `json:"word"`
 	Confidence float64 `json:"confidence"`
+}
+
+type ClassifierResult struct {
+	Confidence float64       `json:"confidence"`
+	Boxes      []BoundingBox `json:"boxes"`
 }
 
 type Classifier struct{}
@@ -44,13 +54,23 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 	}
 
 	if len(boxes) == 0 {
-		return &ClassifierResult{Confidence: 0}, nil
+		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}}, nil
 	}
 
-	// Calculate average confidence from all detected words
+	// Collect bounding boxes and calculate average confidence
 	var totalConfidence float64
+	resultBoxes := make([]BoundingBox, 0, len(boxes))
+
 	for _, box := range boxes {
 		totalConfidence += float64(box.Confidence)
+		resultBoxes = append(resultBoxes, BoundingBox{
+			X:          box.Box.Min.X,
+			Y:          box.Box.Min.Y,
+			Width:      box.Box.Max.X - box.Box.Min.X,
+			Height:     box.Box.Max.Y - box.Box.Min.Y,
+			Word:       box.Word,
+			Confidence: float64(box.Confidence) / 100.0,
+		})
 	}
 
 	avgConfidence := totalConfidence / float64(len(boxes))
@@ -64,5 +84,5 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		normalizedConfidence = 0
 	}
 
-	return &ClassifierResult{Confidence: normalizedConfidence}, nil
+	return &ClassifierResult{Confidence: normalizedConfidence, Boxes: resultBoxes}, nil
 }

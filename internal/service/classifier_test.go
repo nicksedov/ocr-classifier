@@ -113,3 +113,52 @@ func TestClassifierDataset(t *testing.T) {
 		t.Fatalf("Failed to calculate confidence for %d file(s)", errorCount)
 	}
 }
+
+func TestBoundingBoxesOutput(t *testing.T) {
+	datasetPath := filepath.Join("..", "..", "test", "dataset")
+	testImage := "image.jpg"
+	imagePath := filepath.Join(datasetPath, testImage)
+
+	// Check if image exists
+	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
+		t.Fatalf("Test image does not exist: %s", imagePath)
+	}
+
+	// Read image
+	imageData, err := os.ReadFile(imagePath)
+	if err != nil {
+		t.Fatalf("Failed to read image: %v", err)
+	}
+
+	classifier := NewClassifier()
+	result, err := classifier.DetectText(imageData, "eng")
+	if err != nil {
+		t.Fatalf("Failed to detect text: %v", err)
+	}
+
+	// Print bounding boxes info
+	fmt.Println()
+	fmt.Println(strings.Repeat("=", 90))
+	fmt.Printf("Bounding Boxes for: %s\n", testImage)
+	fmt.Printf("Overall Confidence: %.4f\n", result.Confidence)
+	fmt.Printf("Total Boxes Found: %d\n", len(result.Boxes))
+	fmt.Println(strings.Repeat("-", 90))
+	fmt.Printf("%-5s | %-20s | %-8s | %-8s | %-8s | %-8s | %-10s\n",
+		"#", "Word", "X", "Y", "Width", "Height", "Confidence")
+	fmt.Println(strings.Repeat("-", 90))
+
+	for i, box := range result.Boxes {
+		fmt.Printf("%-5d | %-20s | %-8d | %-8d | %-8d | %-8d | %-10.4f\n",
+			i+1, truncateString(box.Word, 20), box.X, box.Y, box.Width, box.Height, box.Confidence)
+	}
+
+	fmt.Println(strings.Repeat("=", 90))
+	fmt.Println()
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen-3] + "..."
+}
