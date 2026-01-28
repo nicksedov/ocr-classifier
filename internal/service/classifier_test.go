@@ -1,7 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"path/filepath"
 	"sort"
@@ -27,12 +31,16 @@ func TestClassifierDataset(t *testing.T) {
 	}
 
 	type result struct {
-		file          string
-		confidenceEng float64
-		confidenceRus float64
-		angleEng      int
-		angleRus      int
-		err           error
+		file           string
+		width          int
+		height         int
+		confidenceEng  float64
+		confidenceRus  float64
+		angleEng       int
+		angleRus       int
+		scaleFactorEng float64
+		scaleFactorRus float64
+		err            error
 	}
 
 	// Collect all image files
@@ -85,6 +93,15 @@ func TestClassifierDataset(t *testing.T) {
 					continue
 				}
 
+				// Decode image to get dimensions
+				img, _, err := image.Decode(bytes.NewReader(imageData))
+				var width, height int
+				if err == nil {
+					bounds := img.Bounds()
+					width = bounds.Dx()
+					height = bounds.Dy()
+				}
+
 				resEng, errEng := classifier.DetectText(imageData, "eng")
 				if errEng != nil {
 					resultsChan <- result{file: j.relPath, err: errEng}
@@ -102,11 +119,15 @@ func TestClassifierDataset(t *testing.T) {
 				}
 
 				resultsChan <- result{
-					file:          j.relPath,
-					confidenceEng: resEng.Confidence,
-					confidenceRus: resRus.Confidence,
-					angleEng:      resEng.Angle,
-					angleRus:      resRus.Angle,
+					file:           j.relPath,
+					width:          width,
+					height:         height,
+					confidenceEng:  resEng.Confidence,
+					confidenceRus:  resRus.Confidence,
+					angleEng:       resEng.Angle,
+					angleRus:       resRus.Angle,
+					scaleFactorEng: resEng.ScaleFactor,
+					scaleFactorRus: resRus.ScaleFactor,
 				}
 			}
 		}()
@@ -141,19 +162,22 @@ func TestClassifierDataset(t *testing.T) {
 
 	// Print results table
 	fmt.Println()
-	fmt.Println(strings.Repeat("=", 95))
-	fmt.Printf("%-30s | %-12s | %-6s | %-12s | %-6s\n", "File", "English", "Angle", "Russian", "Angle")
-	fmt.Println(strings.Repeat("-", 95))
+	fmt.Println(strings.Repeat("=", 135))
+	fmt.Printf("%-30s | %-12s | %-12s | %-6s | %-6s | %-12s | %-6s | %-6s\n",
+		"File", "Dimensions", "English", "Angle", "Scale", "Russian", "Angle", "Scale")
+	fmt.Println(strings.Repeat("-", 135))
 
 	for _, r := range results {
 		if r.err != nil {
 			fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
 		} else {
-			fmt.Printf("%-30s | %-12.4f | %-6d | %-12.4f | %-6d\n", r.file, r.confidenceEng, r.angleEng, r.confidenceRus, r.angleRus)
+			dims := fmt.Sprintf("%dx%d", r.width, r.height)
+			fmt.Printf("%-30s | %-12s | %-12.4f | %-6d | %-6.2f | %-12.4f | %-6d | %-6.2f\n",
+				r.file, dims, r.confidenceEng, r.angleEng, r.scaleFactorEng, r.confidenceRus, r.angleRus, r.scaleFactorRus)
 		}
 	}
 
-	fmt.Println(strings.Repeat("=", 95))
+	fmt.Println(strings.Repeat("=", 135))
 	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
 	fmt.Printf("Processing time: %v\n", time.Since(timestamp))
 	fmt.Println()
@@ -179,6 +203,15 @@ func TestBoundingBoxesOutput(t *testing.T) {
 		t.Fatalf("Failed to read image: %v", err)
 	}
 
+	// Decode image to get dimensions
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	var width, height int
+	if err == nil {
+		bounds := img.Bounds()
+		width = bounds.Dx()
+		height = bounds.Dy()
+	}
+
 	classifier := NewClassifier()
 	result, err := classifier.DetectText(imageData, "eng")
 	if err != nil {
@@ -189,6 +222,8 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 90))
 	fmt.Printf("Bounding Boxes for: %s\n", testImage)
+	fmt.Printf("Image Dimensions: %dx%d\n", width, height)
+	fmt.Printf("Scale Factor: %.2f\n", result.ScaleFactor)
 	fmt.Printf("Overall Confidence: %.4f\n", result.Confidence)
 	fmt.Printf("Best Rotation Angle: %d\n", result.Angle)
 	fmt.Printf("Total Boxes Found: %d\n", len(result.Boxes))
