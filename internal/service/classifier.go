@@ -41,9 +41,9 @@ func NewClassifier() *Classifier {
 }
 
 const (
-	confidenceThreshold = 0.65
+	confidenceThreshold = 0.66  // Further OCR attempts will be stopped once the confidence threshold is reached
 	numWorkers          = 4
-	medianRadius        = 1.0 // Radius for median blur (kernel size 3 = radius 1)
+	medianRadius        = 1.0   // Radius for median blur (kernel size 3 = radius 1)
 
 	// Image size thresholds for dynamic scaling
 	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
@@ -410,14 +410,14 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 
 	// Send angles to workers
 	go func() {
+		defer close(anglesChan)
 		for _, angle := range angles {
 			select {
 			case <-ctx.Done():
-				break
+				return
 			case anglesChan <- angle:
 			}
 		}
-		close(anglesChan)
 	}()
 
 	// Wait for workers in a separate goroutine
