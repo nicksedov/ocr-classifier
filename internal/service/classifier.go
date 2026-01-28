@@ -249,10 +249,10 @@ func preprocessImage(img image.Image) (*image.Gray, float64) {
 	//return binary
 }
 
-// containsLetters checks if a string contains Latin or Cyrillic letters
-func containsLetters(s string) bool {
+// containsLettersOrDigits checks if a string contains Latin/Cyrillic letters or digits
+func containsLettersOrDigits(s string) bool {
 	for _, r := range s {
-		if unicode.Is(unicode.Latin, r) || unicode.Is(unicode.Cyrillic, r) {
+		if unicode.Is(unicode.Latin, r) || unicode.Is(unicode.Cyrillic, r) || unicode.IsDigit(r) {
 			return true
 		}
 	}
@@ -288,8 +288,8 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 		if box.Confidence == 0 {
 			continue
 		}
-		// Filter: only include boxes with Latin or Cyrillic letters
-		if !containsLetters(box.Word) {
+		// Filter: only include boxes with Latin/Cyrillic letters or digits
+		if !containsLettersOrDigits(box.Word) {
 			continue
 		}
 		totalConfidence += float64(box.Confidence)
