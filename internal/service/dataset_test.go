@@ -45,6 +45,10 @@ func TestClassifierDatasetRus(t *testing.T) {
 	runDatasetTest(t, "rus")
 }
 
+func TestClassifierDatasetFull(t *testing.T) {
+	runDatasetTest(t, "")
+}
+
 func runDatasetTest(t *testing.T, subfolder string) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset", subfolder)
 
