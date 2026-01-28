@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"math"
+	"sort"
 	"sync"
 
 	"github.com/otiai10/gosseract/v2"
@@ -43,6 +44,8 @@ func NewClassifier() *Classifier {
 const (
 	confidenceThreshold = 0.65
 	numWorkers          = 3
+	scaleFactor         = 3 // Scale factor for preprocessing
+	medianKernelSize    = 3 // Kernel size for median blur
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -163,6 +166,227 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// cubicWeight calculates the weight for bicubic interpolation
+func cubicWeight(x float64) float64 {
+	x = math.Abs(x)
+	if x <= 1 {
+		return 1.5*x*x*x - 2.5*x*x + 1
+	} else if x < 2 {
+		return -0.5*x*x*x + 2.5*x*x - 4*x + 2
+	}
+	return 0
+}
+
+// scaleImageBicubic scales an image using bicubic interpolation
+func scaleImageBicubic(img image.Image, factor int) *image.Gray {
+	bounds := img.Bounds()
+	oldW, oldH := bounds.Dx(), bounds.Dy()
+	newW, newH := oldW*factor, oldH*factor
+
+	newImg := image.NewGray(image.Rect(0, 0, newW, newH))
+
+	for y := 0; y < newH; y++ {
+		for x := 0; x < newW; x++ {
+			// Map to source coordinates
+			srcX := float64(x) / float64(factor)
+			srcY := float64(y) / float64(factor)
+
+			// Get integer and fractional parts
+			x0 := int(math.Floor(srcX))
+			y0 := int(math.Floor(srcY))
+			dx := srcX - float64(x0)
+			dy := srcY - float64(y0)
+
+			// Bicubic interpolation using 4x4 neighborhood
+			var value float64
+			var weightSum float64
+
+			for j := -1; j <= 2; j++ {
+				for i := -1; i <= 2; i++ {
+					px := x0 + i
+					py := y0 + j
+
+					// Clamp to bounds
+					if px < 0 {
+						px = 0
+					}
+					if px >= oldW {
+						px = oldW - 1
+					}
+					if py < 0 {
+						py = 0
+					}
+					if py >= oldH {
+						py = oldH - 1
+					}
+
+					// Get grayscale value from source
+					r, g, b, _ := img.At(px+bounds.Min.X, py+bounds.Min.Y).RGBA()
+					gray := float64(0.299*float64(r)+0.587*float64(g)+0.114*float64(b)) / 256.0
+
+					// Calculate weight
+					weight := cubicWeight(float64(i)-dx) * cubicWeight(float64(j)-dy)
+					value += gray * weight
+					weightSum += weight
+				}
+			}
+
+			if weightSum > 0 {
+				value /= weightSum
+			}
+
+			// Clamp to valid range
+			if value < 0 {
+				value = 0
+			}
+			if value > 255 {
+				value = 255
+			}
+
+			newImg.SetGray(x, y, color.Gray{Y: uint8(value)})
+		}
+	}
+
+	return newImg
+}
+
+// medianBlur applies median blur filter to a grayscale image
+func medianBlur(img *image.Gray, kernelSize int) *image.Gray {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	newImg := image.NewGray(image.Rect(0, 0, w, h))
+
+	radius := kernelSize / 2
+	windowSize := kernelSize * kernelSize
+	window := make([]uint8, windowSize)
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			// Collect values in the kernel window
+			idx := 0
+			for ky := -radius; ky <= radius; ky++ {
+				for kx := -radius; kx <= radius; kx++ {
+					px, py := x+kx, y+ky
+
+					// Clamp to bounds
+					if px < 0 {
+						px = 0
+					}
+					if px >= w {
+						px = w - 1
+					}
+					if py < 0 {
+						py = 0
+					}
+					if py >= h {
+						py = h - 1
+					}
+
+					window[idx] = img.GrayAt(px, py).Y
+					idx++
+				}
+			}
+
+			// Sort and get median
+			sort.Slice(window, func(i, j int) bool {
+				return window[i] < window[j]
+			})
+			median := window[windowSize/2]
+
+			newImg.SetGray(x, y, color.Gray{Y: median})
+		}
+	}
+
+	return newImg
+}
+
+// otsuThreshold calculates optimal threshold using Otsu's method
+func otsuThreshold(img *image.Gray) uint8 {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	totalPixels := w * h
+
+	// Calculate histogram
+	histogram := make([]int, 256)
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			histogram[img.GrayAt(x, y).Y]++
+		}
+	}
+
+	// Calculate total mean
+	var sumTotal float64
+	for i := 0; i < 256; i++ {
+		sumTotal += float64(i) * float64(histogram[i])
+	}
+
+	var sumB float64
+	var wB, wF int
+	var maxVariance float64
+	var threshold uint8
+
+	for t := 0; t < 256; t++ {
+		wB += histogram[t]
+		if wB == 0 {
+			continue
+		}
+
+		wF = totalPixels - wB
+		if wF == 0 {
+			break
+		}
+
+		sumB += float64(t) * float64(histogram[t])
+
+		mB := sumB / float64(wB)
+		mF := (sumTotal - sumB) / float64(wF)
+
+		// Between-class variance
+		variance := float64(wB) * float64(wF) * (mB - mF) * (mB - mF)
+
+		if variance > maxVariance {
+			maxVariance = variance
+			threshold = uint8(t)
+		}
+	}
+
+	return threshold
+}
+
+// applyThreshold applies binary threshold to a grayscale image
+func applyThreshold(img *image.Gray, threshold uint8) *image.Gray {
+	bounds := img.Bounds()
+	w, h := bounds.Dx(), bounds.Dy()
+	newImg := image.NewGray(image.Rect(0, 0, w, h))
+
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if img.GrayAt(x, y).Y > threshold {
+				newImg.SetGray(x, y, color.Gray{Y: 255})
+			} else {
+				newImg.SetGray(x, y, color.Gray{Y: 0})
+			}
+		}
+	}
+
+	return newImg
+}
+
+// preprocessImage applies preprocessing pipeline: scale, grayscale, median blur, OTSU threshold
+func preprocessImage(img image.Image) *image.Gray {
+	// Step 1: Scale image using bicubic interpolation (also converts to grayscale)
+	scaled := scaleImageBicubic(img, scaleFactor)
+
+	// Step 2: Apply median blur to reduce noise
+	blurred := medianBlur(scaled, medianKernelSize)
+
+	// Step 3: Apply OTSU thresholding for binary image
+	threshold := otsuThreshold(blurred)
+	binary := applyThreshold(blurred, threshold)
+
+	return binary
+}
+
 // detectTextSingle performs OCR on a single image
 func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
@@ -219,8 +443,29 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		lang = "eng"
 	}
 
-	// Phase 1: Try without rotation
-	result, err := c.detectTextSingle(imageData, lang)
+	// Decode the original image
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		// If we can't decode, try raw OCR
+		result, ocrErr := c.detectTextSingle(imageData, lang)
+		if ocrErr != nil {
+			return nil, ocrErr
+		}
+		result.Angle = 0
+		return result, nil
+	}
+
+	// Preprocess: scale 3x with bicubic interpolation, grayscale, median blur, OTSU threshold
+	preprocessed := preprocessImage(img)
+
+	// Encode preprocessed image for OCR
+	preprocessedData, err := encodeImage(preprocessed, "png")
+	if err != nil {
+		return nil, err
+	}
+
+	// Phase 1: Try without rotation on preprocessed image
+	result, err := c.detectTextSingle(preprocessedData, lang)
 	if err != nil {
 		return nil, err
 	}
@@ -230,14 +475,8 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		return result, nil
 	}
 
-	// Decode the image for rotation in Phase 2
-	img, format, err := image.Decode(bytes.NewReader(imageData))
-	if err != nil {
-		// If we can't decode, return Phase 1 result
-		return result, nil
-	}
-
 	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
+	// Rotations are applied to the preprocessed image
 	angles := phase2Angles
 
 	type rotationResult struct {
@@ -269,8 +508,8 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 						return
 					}
 
-					rotated := rotateImage(img, angle)
-					data, encErr := encodeImage(rotated, format)
+					rotated := rotateImage(preprocessed, angle)
+					data, encErr := encodeImage(rotated, "png")
 					if encErr != nil {
 						resultsChan <- rotationResult{angle: angle, err: encErr}
 						continue
