@@ -14,7 +14,7 @@ import (
 const defaultWorkers = 6
 
 func TestClassifierDataset(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset")
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "eng")
 
 	// Check if dataset directory exists
 	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
@@ -164,8 +164,8 @@ func TestClassifierDataset(t *testing.T) {
 }
 
 func TestBoundingBoxesOutput(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset")
-	testImage := "image.jpg"
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "rus")
+	testImage := "penalty_form.jpg"
 	imagePath := filepath.Join(datasetPath, testImage)
 
 	// Check if image exists
@@ -180,7 +180,7 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	}
 
 	classifier := NewClassifier()
-	result, err := classifier.DetectText(imageData, "eng")
+	result, err := classifier.DetectText(imageData, "rus")
 	if err != nil {
 		t.Fatalf("Failed to detect text: %v", err)
 	}

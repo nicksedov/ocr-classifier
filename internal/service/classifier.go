@@ -44,8 +44,8 @@ func NewClassifier() *Classifier {
 const (
 	confidenceThreshold = 0.65
 	numWorkers          = 3
-	scaleFactor         = 3   // Scale factor for preprocessing
-	medianRadius        = 1.0 // Radius for median blur (kernel size 3 = radius 1)
+	scaleFactor         = 1.25  // Scale factor for preprocessing
+	medianRadius        = 1.0   // Radius for median blur (kernel size 3 = radius 1)
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -93,7 +93,7 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 	case "png":
 		err = png.Encode(&buf, img)
 	default:
-		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95})
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85})
 	}
 
 	if err != nil {
@@ -177,7 +177,7 @@ func applyThreshold(img *image.Gray, threshold uint8) *image.Gray {
 // preprocessImage applies preprocessing pipeline: scale, grayscale, median blur, OTSU threshold
 func preprocessImage(img image.Image) *image.Gray {
 	bounds := img.Bounds()
-	newW, newH := bounds.Dx()*scaleFactor, bounds.Dy()*scaleFactor
+	newW, newH := int(float64(bounds.Dx()) * scaleFactor), int(float64(bounds.Dy()) * scaleFactor)
 
 	// Step 1: Scale image using cubic interpolation (CatmullRom)
 	scaled := imaging.Resize(img, newW, newH, imaging.CatmullRom)
@@ -196,11 +196,13 @@ func preprocessImage(img image.Image) *image.Gray {
 		}
 	}
 
-	// Step 4: Apply OTSU thresholding for binary image
-	threshold := otsuThreshold(grayImg)
-	binary := applyThreshold(grayImg, threshold)
+	return grayImg
 
-	return binary
+	// Step 4: Apply OTSU thresholding for binary image
+	//threshold := otsuThreshold(grayImg)
+	//binary := applyThreshold(grayImg, threshold)
+
+	//return binary
 }
 
 // detectTextSingle performs OCR on a single image
