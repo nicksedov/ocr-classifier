@@ -4,15 +4,9 @@ import (
 	"bytes"
 	"context"
 	"image"
-	"image/color"
-	"image/jpeg"
-	"image/png"
-	"math"
 	"sync"
 	"unicode"
 
-	"github.com/anthonynsimon/bild/effect"
-	"github.com/disintegration/imaging"
 	"github.com/otiai10/gosseract/v2"
 )
 
@@ -34,6 +28,12 @@ type ClassifierResult struct {
 	ScaleFactor        float64       `json:"scale_factor"`
 }
 
+type rotationResult struct {
+	angle  int
+	result *ClassifierResult
+	err    error
+}
+
 type Classifier struct{}
 
 func NewClassifier() *Classifier {
@@ -41,16 +41,8 @@ func NewClassifier() *Classifier {
 }
 
 const (
-	confidenceThreshold = 0.66  // Further OCR attempts will be stopped once the confidence threshold is reached
+	confidenceThreshold = 0.66 // Further OCR attempts will be stopped once the confidence threshold is reached
 	numWorkers          = 4
-	medianRadius        = 1.0   // Radius for median blur (kernel size 3 = radius 1)
-
-	// Image size thresholds for dynamic scaling
-	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
-	halfMegapixel   = 524_288           // 0.5 MP
-	oneMegapixel    = 2 * halfMegapixel // 1 MP
-	twoMegapixels   = 2 * oneMegapixel  // 2 MP
-	threeMegapixels = 3 * oneMegapixel  // 3 MP
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -64,107 +56,6 @@ var phase2Angles = []int{
 	170, 175, 180, 185, 190,
 	// 270 and deviations
 	260, 265, 270, 275, 280,
-}
-
-// rotateImage rotates an image by the specified angle in degrees using imaging library
-func rotateImage(img image.Image, angleDeg int) image.Image {
-	// Normalize angle to 0-359
-	angleDeg = ((angleDeg % 360) + 360) % 360
-
-	if angleDeg == 0 {
-		return imaging.Clone(img)
-	}
-
-	// Use optimized 90-degree rotations when possible
-	switch angleDeg {
-	case 90:
-		return imaging.Rotate90(img)
-	case 180:
-		return imaging.Rotate180(img)
-	case 270:
-		return imaging.Rotate270(img)
-	}
-
-	// General rotation for arbitrary angles with white background
-	return imaging.Rotate(img, float64(-angleDeg), color.White)
-}
-
-// encodeImage encodes an image to bytes in the specified format
-func encodeImage(img image.Image, format string) ([]byte, error) {
-	var buf bytes.Buffer
-	var err error
-
-	switch format {
-	case "png":
-		err = png.Encode(&buf, img)
-	default:
-		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85})
-	}
-
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-// preprocessImage applies preprocessing pipeline: scale, grayscale, median blur
-// Returns (nil, 0) if image is too small to process
-// Returns (processedImage, scaleFactor) on success
-func preprocessImage(img image.Image) (*image.Gray, float64) {
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	pixels := w * h
-
-	// Skip images with any dimension too small to process
-	if w <= minDimension || h <= minDimension {
-		return nil, 0
-	}
-
-	// Calculate target dimensions and scale factor based on megapixels
-	var newW, newH int
-	var scaleFactor float64
-	switch {
-	case pixels < halfMegapixel:
-		// Less than 0.5 MP: scale 4x
-		scaleFactor = 4.0
-		newW, newH = w*4, h*4
-	case pixels < oneMegapixel:
-		// Less than 1 MP: scale 3x
-		scaleFactor = 3.0
-		newW, newH = w*3, h*3
-	case pixels < twoMegapixels:
-		// Less than 2 MP: scale 1.5x
-		scaleFactor = 1.5
-		newW, newH = w*3/2, h*3/2
-	case pixels <= threeMegapixels:
-		// 2-3 MP: no scaling
-		scaleFactor = 1.0
-		newW, newH = w, h
-	default:
-		// More than 3 MP: scale down to 3 MP
-		scaleFactor = math.Sqrt(float64(threeMegapixels) / float64(pixels))
-		newW = int(float64(w) * scaleFactor)
-		newH = int(float64(h) * scaleFactor)
-	}
-
-	// Step 1: Scale image using cubic interpolation (CatmullRom)
-	scaled := imaging.Resize(img, newW, newH, imaging.CatmullRom)
-
-	// Step 2: Convert to grayscale
-	gray := imaging.Grayscale(scaled)
-
-	// Step 3: Apply median blur to reduce noise
-	blurred := effect.Median(gray, medianRadius)
-
-	// Convert to *image.Gray for OTSU
-	grayImg := image.NewGray(blurred.Bounds())
-	for y := blurred.Bounds().Min.Y; y < blurred.Bounds().Max.Y; y++ {
-		for x := blurred.Bounds().Min.X; x < blurred.Bounds().Max.X; x++ {
-			grayImg.Set(x-blurred.Bounds().Min.X, y-blurred.Bounds().Min.Y, blurred.At(x, y))
-		}
-	}
-
-	return grayImg, scaleFactor
 }
 
 // countTokens counts meaningful characters in a string:
@@ -350,19 +241,15 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 
 	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
 	// Rotations are applied to the preprocessed image
-	angles := phase2Angles
+	return c.detectTextWithRotations(preprocessed, scaleFactor, result)
+}
 
-	type rotationResult struct {
-		angle  int
-		result *ClassifierResult
-		err    error
-	}
-
+func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult) (*ClassifierResult, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	anglesChan := make(chan int, len(angles))
-	resultsChan := make(chan rotationResult, len(angles))
+	anglesChan := make(chan int, len(phase2Angles))
+	resultsChan := make(chan rotationResult, len(phase2Angles))
 
 	var wg sync.WaitGroup
 
@@ -371,47 +258,14 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case angle, ok := <-anglesChan:
-					if !ok {
-						return
-					}
-
-					rotated := rotateImage(preprocessed, angle)
-					data, encErr := encodeImage(rotated, "png")
-					if encErr != nil {
-						resultsChan <- rotationResult{angle: angle, err: encErr}
-						continue
-					}
-
-					res, detectErr := c.detectTextSingle(data)
-					if detectErr != nil {
-						resultsChan <- rotationResult{angle: angle, err: detectErr}
-						continue
-					}
-
-					res.Angle = angle
-					res.ScaleFactor = scaleFactor
-					resultsChan <- rotationResult{angle: angle, result: res}
-
-					// If confidence threshold reached, signal to stop
-					if res.WeightedConfidence >= confidenceThreshold {
-						cancel()
-						return
-					}
-				}
-			}
+			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, scaleFactor)
 		}()
 	}
 
 	// Send angles to workers
 	go func() {
 		defer close(anglesChan)
-		for _, angle := range angles {
+		for _, angle := range phase2Angles {
 			select {
 			case <-ctx.Done():
 				return
@@ -427,7 +281,7 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 	}()
 
 	// Collect results and find the best one
-	bestResult := result // Start with Phase 1 result
+	bestResult := phase1Result
 
 	for rr := range resultsChan {
 		if rr.err != nil {
@@ -446,4 +300,39 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 	}
 
 	return bestResult, nil
+}
+
+func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, scaleFactor float64) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case angle, ok := <-anglesChan:
+			if !ok {
+				return
+			}
+
+			rotated := rotateImage(preprocessed, angle)
+			data, encErr := encodeImage(rotated, "png")
+			if encErr != nil {
+				resultsChan <- rotationResult{angle: angle, err: encErr}
+				continue
+			}
+
+			res, detectErr := c.detectTextSingle(data)
+			if detectErr != nil {
+				resultsChan <- rotationResult{angle: angle, err: detectErr}
+				continue
+			}
+
+			res.Angle = angle
+			res.ScaleFactor = scaleFactor
+			resultsChan <- rotationResult{angle: angle, result: res}
+
+			// If confidence threshold reached, signal to stop
+			if res.WeightedConfidence >= confidenceThreshold {
+				return
+			}
+		}
+	}
 }
