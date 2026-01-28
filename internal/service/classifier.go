@@ -111,78 +111,6 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// otsuThreshold calculates optimal threshold using Otsu's method
-func otsuThreshold(img *image.Gray) uint8 {
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	totalPixels := w * h
-
-	// Calculate histogram
-	histogram := make([]int, 256)
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			histogram[img.GrayAt(x, y).Y]++
-		}
-	}
-
-	// Calculate total mean
-	var sumTotal float64
-	for i := 0; i < 256; i++ {
-		sumTotal += float64(i) * float64(histogram[i])
-	}
-
-	var sumB float64
-	var wB, wF int
-	var maxVariance float64
-	var threshold uint8
-
-	for t := 0; t < 256; t++ {
-		wB += histogram[t]
-		if wB == 0 {
-			continue
-		}
-
-		wF = totalPixels - wB
-		if wF == 0 {
-			break
-		}
-
-		sumB += float64(t) * float64(histogram[t])
-
-		mB := sumB / float64(wB)
-		mF := (sumTotal - sumB) / float64(wF)
-
-		// Between-class variance
-		variance := float64(wB) * float64(wF) * (mB - mF) * (mB - mF)
-
-		if variance > maxVariance {
-			maxVariance = variance
-			threshold = uint8(t)
-		}
-	}
-
-	return threshold
-}
-
-// applyThreshold applies binary threshold to a grayscale image
-func applyThreshold(img *image.Gray, threshold uint8) *image.Gray {
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	newImg := image.NewGray(image.Rect(0, 0, w, h))
-
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			if img.GrayAt(x, y).Y > threshold {
-				newImg.SetGray(x, y, color.Gray{Y: 255})
-			} else {
-				newImg.SetGray(x, y, color.Gray{Y: 0})
-			}
-		}
-	}
-
-	return newImg
-}
-
 // preprocessImage applies preprocessing pipeline: scale, grayscale, median blur
 // Returns (nil, 0) if image is too small to process
 // Returns (processedImage, scaleFactor) on success
@@ -241,12 +169,6 @@ func preprocessImage(img image.Image) (*image.Gray, float64) {
 	}
 
 	return grayImg, scaleFactor
-
-	// Step 4: Apply OTSU thresholding for binary image
-	//threshold := otsuThreshold(grayImg)
-	//binary := applyThreshold(grayImg, threshold)
-
-	//return binary
 }
 
 // containsLettersOrDigits checks if a string contains Latin/Cyrillic letters or digits

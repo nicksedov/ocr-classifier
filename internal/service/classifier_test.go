@@ -199,7 +199,7 @@ func TestBoundingBoxesInscription(t *testing.T) {
 }
 
 func TestBoundingBoxesRus(t *testing.T) {
-	runBoundingBoxesTest(t, "rus", "contract01.jpg", "rus")
+	runBoundingBoxesTest(t, "rus", "passportscan02.png", "rus")
 }
 
 func runBoundingBoxesTest(t *testing.T, subfolder, filename, lang string) {
