@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 const defaultWorkers = 8
@@ -70,7 +71,7 @@ func TestClassifierDataset(t *testing.T) {
 	if len(jobs) < numWorkers {
 		numWorkers = len(jobs)
 	}
-
+	timestamp := time.Now()
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
@@ -150,6 +151,7 @@ func TestClassifierDataset(t *testing.T) {
 
 	fmt.Println(strings.Repeat("=", 95))
 	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
+	fmt.Printf("Processing time: %v\n", time.Since(timestamp))
 	fmt.Println()
 
 	if errorCount > 0 {
