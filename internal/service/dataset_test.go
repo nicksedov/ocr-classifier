@@ -17,6 +17,18 @@ import (
 
 const defaultWorkers = 6
 
+type datasetResult struct {
+	file         string
+	width        int
+	height       int
+	scaleFactor  float64
+	meanConf     float64
+	weightedConf float64
+	tokenCount   int
+	angle        int
+	err          error
+}
+
 func TestClassifierDatasetEng(t *testing.T) {
 	runDatasetTest(t, "eng")
 }
@@ -36,30 +48,36 @@ func TestClassifierDatasetRus(t *testing.T) {
 func runDatasetTest(t *testing.T, subfolder string) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset", subfolder)
 
-	// Check if dataset directory exists
 	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
 		t.Skipf("Dataset directory does not exist: %s", datasetPath)
 	}
 
-	type job struct {
-		path    string
-		relPath string
+	jobs := collectImageFiles(t, datasetPath)
+	if len(jobs) == 0 {
+		t.Fatal("No image files found in the dataset directory")
 	}
 
-	type result struct {
-		file         string
-		width        int
-		height       int
-		scaleFactor  float64
-		meanConf     float64
-		weightedConf float64
-		tokenCount   int
-		angle        int
-		err          error
-	}
+	timestamp := time.Now()
+	results := processDatasetJobs(jobs)
 
-	// Collect all image files
-	var jobs []job
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].file < results[j].file
+	})
+
+	errorCount := printDatasetReport(subfolder, results, len(jobs), timestamp)
+
+	if errorCount > 0 {
+		t.Fatalf("Failed to calculate confidence for %d file(s)", errorCount)
+	}
+}
+
+type imageJob struct {
+	path    string
+	relPath string
+}
+
+func collectImageFiles(t *testing.T, datasetPath string) []imageJob {
+	var jobs []imageJob
 	err := filepath.Walk(datasetPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -72,86 +90,92 @@ func runDatasetTest(t *testing.T, subfolder string) {
 			return nil
 		}
 		relPath, _ := filepath.Rel(datasetPath, path)
-		jobs = append(jobs, job{path: path, relPath: relPath})
+		jobs = append(jobs, imageJob{path: path, relPath: relPath})
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("Error walking dataset directory: %v", err)
 	}
+	return jobs
+}
 
-	if len(jobs) == 0 {
-		t.Fatal("No image files found in the dataset directory")
-	}
+func processDatasetJobs(jobs []imageJob) []datasetResult {
+	jobsChan := make(chan imageJob, len(jobs))
+	resultsChan := make(chan datasetResult, len(jobs))
 
-	// Channels for worker pool
-	jobsChan := make(chan job, len(jobs))
-	resultsChan := make(chan result, len(jobs))
-
-	// Start workers
-	var wg sync.WaitGroup
 	numWorkers := defaultWorkers
 	if len(jobs) < numWorkers {
 		numWorkers = len(jobs)
 	}
-	timestamp := time.Now()
+
+	var wg sync.WaitGroup
 	for i := 0; i < numWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			classifier := NewClassifier()
-
 			for j := range jobsChan {
-				imageData, err := os.ReadFile(j.path)
-				if err != nil {
-					resultsChan <- result{file: j.relPath, err: err}
-					continue
-				}
-
-				// Decode image to get dimensions
-				img, _, err := image.Decode(bytes.NewReader(imageData))
-				var width, height int
-				if err == nil {
-					bounds := img.Bounds()
-					width = bounds.Dx()
-					height = bounds.Dy()
-				}
-
-				resEng, errEng := classifier.DetectText(imageData)
-				if errEng != nil {
-					resultsChan <- result{file: j.relPath, err: errEng}
-					continue
-				}
-
-				resultsChan <- result{
-					file:         j.relPath,
-					width:        width,
-					height:       height,
-					scaleFactor:  resEng.ScaleFactor,
-					meanConf:     resEng.MeanConfidence,
-					weightedConf: resEng.WeightedConfidence,
-					tokenCount:   resEng.TokenCount,
-					angle:        resEng.Angle,
-				}
+				resultsChan <- processImage(classifier, j)
 			}
 		}()
 	}
 
-	// Send jobs to workers
 	for _, j := range jobs {
 		jobsChan <- j
 	}
 	close(jobsChan)
 
-	// Wait for all workers to finish
 	wg.Wait()
 	close(resultsChan)
 
-	// Collect results
-	var results []result
-	var processedCount, errorCount int
+	var results []datasetResult
 	for r := range resultsChan {
 		results = append(results, r)
+	}
+	return results
+}
+
+func processImage(classifier *Classifier, j imageJob) datasetResult {
+	imageData, err := os.ReadFile(j.path)
+	if err != nil {
+		return datasetResult{file: j.relPath, err: err}
+	}
+
+	width, height := getImageDimensions(imageData)
+
+	res, err := classifier.DetectText(imageData)
+	if err != nil {
+		return datasetResult{file: j.relPath, err: err}
+	}
+
+	return datasetResult{
+		file:         j.relPath,
+		width:        width,
+		height:       height,
+		scaleFactor:  res.ScaleFactor,
+		meanConf:     res.MeanConfidence,
+		weightedConf: res.WeightedConfidence,
+		tokenCount:   res.TokenCount,
+		angle:        res.Angle,
+	}
+}
+
+func getImageDimensions(imageData []byte) (int, int) {
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return 0, 0
+	}
+	bounds := img.Bounds()
+	return bounds.Dx(), bounds.Dy()
+}
+
+func printDatasetReport(subfolder string, results []datasetResult, totalJobs int, startTime time.Time) int {
+	fmt.Println()
+	printDatasetHeader(subfolder)
+
+	var processedCount, errorCount int
+	for _, r := range results {
+		printDatasetRow(r)
 		if r.err != nil {
 			errorCount++
 		} else {
@@ -159,37 +183,32 @@ func runDatasetTest(t *testing.T, subfolder string) {
 		}
 	}
 
-	// Sort results by filename for consistent output
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].file < results[j].file
-	})
+	printDatasetSummary(totalJobs, processedCount, errorCount, startTime)
+	return errorCount
+}
 
-	// Print results table
-	fmt.Println()
+func printDatasetHeader(subfolder string) {
 	fmt.Println(strings.Repeat("=", 120))
 	fmt.Printf("Dataset: %s\n", subfolder)
 	fmt.Println(strings.Repeat("-", 120))
 	fmt.Printf("%-30s | %-12s | %-6s | %-10s | %-10s | %-8s | %-6s\n",
 		"File", "Dimensions", "Scale", "MeanConf", "WeightConf", "Tokens", "Angle")
 	fmt.Println(strings.Repeat("-", 120))
+}
 
-	for _, r := range results {
-		if r.err != nil {
-			fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
-		} else {
-			dims := fmt.Sprintf("%dx%d", r.width, r.height)
-			fmt.Printf("%-30s | %-12s | %-6.2f | %-10.4f | %-10.4f | %-8d | %-6d\n",
-				r.file, dims, r.scaleFactor, r.meanConf, r.weightedConf, r.tokenCount, r.angle)
-		}
-	}
-
-	fmt.Println(strings.Repeat("=", 120))
-	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
-	fmt.Printf("Processing time: %v\n", time.Since(timestamp))
-	fmt.Println()
-
-	if errorCount > 0 {
-		t.Fatalf("Failed to calculate confidence for %d file(s)", errorCount)
+func printDatasetRow(r datasetResult) {
+	if r.err != nil {
+		fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
+	} else {
+		dims := fmt.Sprintf("%dx%d", r.width, r.height)
+		fmt.Printf("%-30s | %-12s | %-6.2f | %-10.4f | %-10.4f | %-8d | %-6d\n",
+			r.file, dims, r.scaleFactor, r.meanConf, r.weightedConf, r.tokenCount, r.angle)
 	}
 }
 
+func printDatasetSummary(total, processed, errors int, startTime time.Time) {
+	fmt.Println(strings.Repeat("=", 120))
+	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", total, processed, errors, defaultWorkers)
+	fmt.Printf("Processing time: %v\n", time.Since(startTime))
+	fmt.Println()
+}

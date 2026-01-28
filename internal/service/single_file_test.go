@@ -1,9 +1,7 @@
 package service
 
 import (
-	"bytes"
 	"fmt"
-	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
@@ -33,25 +31,16 @@ func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset", subfolder)
 	imagePath := filepath.Join(datasetPath, filename)
 
-	// Check if image exists
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
 		t.Fatalf("Test image does not exist: %s", imagePath)
 	}
 
-	// Read image
 	imageData, err := os.ReadFile(imagePath)
 	if err != nil {
 		t.Fatalf("Failed to read image: %v", err)
 	}
 
-	// Decode image to get dimensions
-	img, _, err := image.Decode(bytes.NewReader(imageData))
-	var width, height int
-	if err == nil {
-		bounds := img.Bounds()
-		width = bounds.Dx()
-		height = bounds.Dy()
-	}
+	width, height := getImageDimensions(imageData)
 
 	classifier := NewClassifier()
 	result, err := classifier.DetectText(imageData)
@@ -59,8 +48,23 @@ func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
 		t.Fatalf("Failed to detect text: %v", err)
 	}
 
-	// Print bounding boxes info
+	printBoundingBoxReport(subfolder, filename, width, height, result)
+}
+
+func printBoundingBoxReport(subfolder, filename string, width, height int, result *ClassifierResult) {
 	fmt.Println()
+	printBoundingBoxHeader(subfolder, filename, width, height, result)
+	printBoundingBoxTableHeader()
+
+	for i, box := range result.Boxes {
+		printBoundingBoxRow(i+1, box)
+	}
+
+	fmt.Println(strings.Repeat("=", 90))
+	fmt.Println()
+}
+
+func printBoundingBoxHeader(subfolder, filename string, width, height int, result *ClassifierResult) {
 	fmt.Println(strings.Repeat("=", 90))
 	fmt.Printf("Bounding Boxes for: %s/%s\n", subfolder, filename)
 	fmt.Printf("Image Dimensions: %dx%d\n", width, height)
@@ -70,18 +74,18 @@ func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
 	fmt.Printf("Token Count: %d\n", result.TokenCount)
 	fmt.Printf("Best Rotation Angle: %d\n", result.Angle)
 	fmt.Printf("Total Boxes Found: %d\n", len(result.Boxes))
+}
+
+func printBoundingBoxTableHeader() {
 	fmt.Println(strings.Repeat("-", 90))
 	fmt.Printf("%-5s | %-20s | %-8s | %-8s | %-8s | %-8s | %-10s\n",
 		"#", "Word", "X", "Y", "Width", "Height", "Confidence")
 	fmt.Println(strings.Repeat("-", 90))
+}
 
-	for i, box := range result.Boxes {
-		fmt.Printf("%-5d | %-20s | %-8d | %-8d | %-8d | %-8d | %-10.4f\n",
-			i+1, truncateString(box.Word, 20), box.X, box.Y, box.Width, box.Height, box.Confidence)
-	}
-
-	fmt.Println(strings.Repeat("=", 90))
-	fmt.Println()
+func printBoundingBoxRow(index int, box BoundingBox) {
+	fmt.Printf("%-5d | %-20s | %-8d | %-8d | %-8d | %-8d | %-10.4f\n",
+		index, truncateString(box.Word, 20), box.X, box.Y, box.Width, box.Height, box.Confidence)
 }
 
 func truncateString(s string, maxLen int) string {
