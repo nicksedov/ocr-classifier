@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const defaultWorkers = 8
+const defaultWorkers = 6
 
 func TestClassifierDataset(t *testing.T) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset")
@@ -91,10 +91,14 @@ func TestClassifierDataset(t *testing.T) {
 					continue
 				}
 
-				resRus, errRus := classifier.DetectText(imageData, "rus")
-				if errRus != nil {
-					resultsChan <- result{file: j.relPath, err: errRus}
-					continue
+				resRus := &ClassifierResult{}
+				if resEng.Confidence < confidenceThreshold {
+					r, errRus := classifier.DetectText(imageData, "rus")
+					if errRus != nil {
+						resultsChan <- result{file: j.relPath, err: errRus}
+						continue
+					}
+					resRus = r
 				}
 
 				resultsChan <- result{
