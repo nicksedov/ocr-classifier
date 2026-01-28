@@ -18,12 +18,6 @@ func NewClassifyHandler() *ClassifyHandler {
 	}
 }
 
-type ClassifyResponse struct {
-	Confidence float64               `json:"confidence"`
-	Boxes      []service.BoundingBox `json:"boxes"`
-	Angle      int                   `json:"angle"`
-}
-
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
@@ -69,7 +63,7 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	// Validate language
 	if !service.SupportedLanguages[lang] {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "unsupported language, use: eng, rus, deu"})
+		json.NewEncoder(w).Encode(ErrorResponse{Error: "unsupported language, use: eng, rus"})
 		return
 	}
 
@@ -82,9 +76,5 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(ClassifyResponse{
-		Confidence: result.Confidence,
-		Boxes:      result.Boxes,
-		Angle:      result.Angle,
-	})
+	json.NewEncoder(w).Encode(result)
 }

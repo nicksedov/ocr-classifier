@@ -32,10 +32,12 @@ type BoundingBox struct {
 }
 
 type ClassifierResult struct {
-	Confidence  float64       `json:"confidence"`
-	Boxes       []BoundingBox `json:"boxes"`
-	Angle       int           `json:"angle"`
-	ScaleFactor float64       `json:"scale_factor"`
+	MeanConfidence     float64       `json:"mean_confidence"`
+	WeightedConfidence float64       `json:"weighted_confidence"`
+	TokenCount         int           `json:"token_count"`
+	Boxes              []BoundingBox `json:"boxes"`
+	Angle              int           `json:"angle"`
+	ScaleFactor        float64       `json:"scale_factor"`
 }
 
 type Classifier struct{}
@@ -171,14 +173,15 @@ func preprocessImage(img image.Image) (*image.Gray, float64) {
 	return grayImg, scaleFactor
 }
 
-// containsLettersOrDigits checks if a string contains Latin/Cyrillic letters or digits
-func containsLettersOrDigits(s string) bool {
+// countTokens counts Latin/Cyrillic letters and digits in a string
+func countTokens(s string) int {
+	count := 0
 	for _, r := range s {
 		if unicode.Is(unicode.Latin, r) || unicode.Is(unicode.Cyrillic, r) || unicode.IsDigit(r) {
-			return true
+			count++
 		}
 	}
-	return false
+	return count
 }
 
 // detectTextSingle performs OCR on a single image
@@ -200,47 +203,70 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 	}
 
 	if len(boxes) == 0 {
-		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
 	}
 
 	var totalConfidence float64
+	var weightedConfidenceSum float64
+	var totalTokens int
 	resultBoxes := make([]BoundingBox, 0, len(boxes))
 
 	for _, box := range boxes {
 		if box.Confidence == 0 {
 			continue
 		}
-		// Filter: only include boxes with Latin/Cyrillic letters or digits
-		if !containsLettersOrDigits(box.Word) {
+		// Count tokens (Latin/Cyrillic letters and digits)
+		tokens := countTokens(box.Word)
+		// Filter: only include boxes with at least one token
+		if tokens == 0 {
 			continue
 		}
+
+		boxConfidence := float64(box.Confidence) / 100.0
 		totalConfidence += float64(box.Confidence)
+		weightedConfidenceSum += boxConfidence * float64(tokens)
+		totalTokens += tokens
+
 		resultBoxes = append(resultBoxes, BoundingBox{
 			X:          box.Box.Min.X,
 			Y:          box.Box.Min.Y,
 			Width:      box.Box.Max.X - box.Box.Min.X,
 			Height:     box.Box.Max.Y - box.Box.Min.Y,
 			Word:       box.Word,
-			Confidence: float64(box.Confidence) / 100.0,
+			Confidence: boxConfidence,
 		})
 	}
 
 	// Handle case where no valid boxes found after filtering
 	if len(resultBoxes) == 0 {
-		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
 	}
 
-	avgConfidence := totalConfidence / float64(len(resultBoxes))
-	normalizedConfidence := avgConfidence / 100.0
-
-	if normalizedConfidence > 1.0 {
-		normalizedConfidence = 1.0
+	// Calculate mean confidence
+	meanConfidence := totalConfidence / float64(len(resultBoxes)) / 100.0
+	if meanConfidence > 1.0 {
+		meanConfidence = 1.0
 	}
-	if normalizedConfidence < 0 {
-		normalizedConfidence = 0
+	if meanConfidence < 0 {
+		meanConfidence = 0
 	}
 
-	return &ClassifierResult{Confidence: normalizedConfidence, Boxes: resultBoxes, Angle: 0}, nil
+	// Calculate weighted confidence
+	weightedConfidence := weightedConfidenceSum / float64(totalTokens)
+	if weightedConfidence > 1.0 {
+		weightedConfidence = 1.0
+	}
+	if weightedConfidence < 0 {
+		weightedConfidence = 0
+	}
+
+	return &ClassifierResult{
+		MeanConfidence:     meanConfidence,
+		WeightedConfidence: weightedConfidence,
+		TokenCount:         totalTokens,
+		Boxes:              resultBoxes,
+		Angle:              0,
+	}, nil
 }
 
 func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResult, error) {
@@ -267,7 +293,7 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 
 	// If image is too small, return empty result
 	if preprocessed == nil {
-		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}, Angle: 0, ScaleFactor: 0}, nil
+		return &ClassifierResult{}, nil
 	}
 
 	// Encode preprocessed image for OCR
@@ -284,7 +310,7 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 
 	result.Angle = 0
 	result.ScaleFactor = scaleFactor
-	if result.Confidence >= confidenceThreshold {
+	if result.WeightedConfidence >= confidenceThreshold {
 		return result, nil
 	}
 
@@ -339,7 +365,7 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 					resultsChan <- rotationResult{angle: angle, result: res}
 
 					// If confidence threshold reached, signal to stop
-					if res.Confidence >= confidenceThreshold {
+					if res.WeightedConfidence >= confidenceThreshold {
 						cancel()
 						return
 					}
@@ -373,11 +399,11 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		if rr.err != nil {
 			continue
 		}
-		if rr.result.Confidence > bestResult.Confidence {
+		if rr.result.WeightedConfidence > bestResult.WeightedConfidence {
 			bestResult = rr.result
 		}
 		// Early exit if threshold reached
-		if rr.result.Confidence >= confidenceThreshold {
+		if rr.result.WeightedConfidence >= confidenceThreshold {
 			// Drain remaining results
 			for range resultsChan {
 			}
