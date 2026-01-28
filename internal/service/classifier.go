@@ -7,10 +7,10 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
-	"math"
-	"sort"
 	"sync"
 
+	"github.com/anthonynsimon/bild/effect"
+	"github.com/disintegration/imaging"
 	"github.com/otiai10/gosseract/v2"
 )
 
@@ -44,8 +44,8 @@ func NewClassifier() *Classifier {
 const (
 	confidenceThreshold = 0.65
 	numWorkers          = 3
-	scaleFactor         = 3 // Scale factor for preprocessing
-	medianKernelSize    = 3 // Kernel size for median blur
+	scaleFactor         = 3   // Scale factor for preprocessing
+	medianRadius        = 1.0 // Radius for median blur (kernel size 3 = radius 1)
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -61,91 +61,27 @@ var phase2Angles = []int{
 	260, 265, 270, 275, 280,
 }
 
-// rotateImage rotates an image by the specified angle in degrees
+// rotateImage rotates an image by the specified angle in degrees using imaging library
 func rotateImage(img image.Image, angleDeg int) image.Image {
 	// Normalize angle to 0-359
 	angleDeg = ((angleDeg % 360) + 360) % 360
 
 	if angleDeg == 0 {
-		bounds := img.Bounds()
-		newImg := image.NewRGBA(bounds)
-		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-			for x := bounds.Min.X; x < bounds.Max.X; x++ {
-				newImg.Set(x-bounds.Min.X, y-bounds.Min.Y, img.At(x, y))
-			}
-		}
-		return newImg
+		return imaging.Clone(img)
 	}
 
-	// For 90, 180, 270 use optimized rotation
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-
+	// Use optimized 90-degree rotations when possible
 	switch angleDeg {
 	case 90:
-		newImg := image.NewRGBA(image.Rect(0, 0, h, w))
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				newImg.Set(h-1-y, x, img.At(x+bounds.Min.X, y+bounds.Min.Y))
-			}
-		}
-		return newImg
+		return imaging.Rotate90(img)
 	case 180:
-		newImg := image.NewRGBA(image.Rect(0, 0, w, h))
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				newImg.Set(w-1-x, h-1-y, img.At(x+bounds.Min.X, y+bounds.Min.Y))
-			}
-		}
-		return newImg
+		return imaging.Rotate180(img)
 	case 270:
-		newImg := image.NewRGBA(image.Rect(0, 0, h, w))
-		for y := 0; y < h; y++ {
-			for x := 0; x < w; x++ {
-				newImg.Set(y, w-1-x, img.At(x+bounds.Min.X, y+bounds.Min.Y))
-			}
-		}
-		return newImg
+		return imaging.Rotate270(img)
 	}
 
-	// General rotation for arbitrary angles
-	angleRad := float64(angleDeg) * math.Pi / 180.0
-	sin, cos := math.Sin(angleRad), math.Cos(angleRad)
-
-	// Calculate new image dimensions
-	newW := int(math.Ceil(math.Abs(float64(w)*cos) + math.Abs(float64(h)*sin)))
-	newH := int(math.Ceil(math.Abs(float64(w)*sin) + math.Abs(float64(h)*cos)))
-
-	newImg := image.NewRGBA(image.Rect(0, 0, newW, newH))
-
-	// Fill with white background
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
-			newImg.Set(x, y, color.White)
-		}
-	}
-
-	// Center points
-	cx, cy := float64(w)/2, float64(h)/2
-	ncx, ncy := float64(newW)/2, float64(newH)/2
-
-	// Rotate each pixel
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
-			// Map back to original coordinates
-			dx, dy := float64(x)-ncx, float64(y)-ncy
-			srcX := cos*dx + sin*dy + cx
-			srcY := -sin*dx + cos*dy + cy
-
-			// Check bounds and copy pixel
-			ix, iy := int(srcX), int(srcY)
-			if ix >= 0 && ix < w && iy >= 0 && iy < h {
-				newImg.Set(x, y, img.At(ix+bounds.Min.X, iy+bounds.Min.Y))
-			}
-		}
-	}
-
-	return newImg
+	// General rotation for arbitrary angles with white background
+	return imaging.Rotate(img, float64(-angleDeg), color.White)
 }
 
 // encodeImage encodes an image to bytes in the specified format
@@ -164,140 +100,6 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-// cubicWeight calculates the weight for bicubic interpolation
-func cubicWeight(x float64) float64 {
-	x = math.Abs(x)
-	if x <= 1 {
-		return 1.5*x*x*x - 2.5*x*x + 1
-	} else if x < 2 {
-		return -0.5*x*x*x + 2.5*x*x - 4*x + 2
-	}
-	return 0
-}
-
-// scaleImageBicubic scales an image using bicubic interpolation
-func scaleImageBicubic(img image.Image, factor int) *image.Gray {
-	bounds := img.Bounds()
-	oldW, oldH := bounds.Dx(), bounds.Dy()
-	newW, newH := oldW*factor, oldH*factor
-
-	newImg := image.NewGray(image.Rect(0, 0, newW, newH))
-
-	for y := 0; y < newH; y++ {
-		for x := 0; x < newW; x++ {
-			// Map to source coordinates
-			srcX := float64(x) / float64(factor)
-			srcY := float64(y) / float64(factor)
-
-			// Get integer and fractional parts
-			x0 := int(math.Floor(srcX))
-			y0 := int(math.Floor(srcY))
-			dx := srcX - float64(x0)
-			dy := srcY - float64(y0)
-
-			// Bicubic interpolation using 4x4 neighborhood
-			var value float64
-			var weightSum float64
-
-			for j := -1; j <= 2; j++ {
-				for i := -1; i <= 2; i++ {
-					px := x0 + i
-					py := y0 + j
-
-					// Clamp to bounds
-					if px < 0 {
-						px = 0
-					}
-					if px >= oldW {
-						px = oldW - 1
-					}
-					if py < 0 {
-						py = 0
-					}
-					if py >= oldH {
-						py = oldH - 1
-					}
-
-					// Get grayscale value from source
-					r, g, b, _ := img.At(px+bounds.Min.X, py+bounds.Min.Y).RGBA()
-					gray := float64(0.299*float64(r)+0.587*float64(g)+0.114*float64(b)) / 256.0
-
-					// Calculate weight
-					weight := cubicWeight(float64(i)-dx) * cubicWeight(float64(j)-dy)
-					value += gray * weight
-					weightSum += weight
-				}
-			}
-
-			if weightSum > 0 {
-				value /= weightSum
-			}
-
-			// Clamp to valid range
-			if value < 0 {
-				value = 0
-			}
-			if value > 255 {
-				value = 255
-			}
-
-			newImg.SetGray(x, y, color.Gray{Y: uint8(value)})
-		}
-	}
-
-	return newImg
-}
-
-// medianBlur applies median blur filter to a grayscale image
-func medianBlur(img *image.Gray, kernelSize int) *image.Gray {
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	newImg := image.NewGray(image.Rect(0, 0, w, h))
-
-	radius := kernelSize / 2
-	windowSize := kernelSize * kernelSize
-	window := make([]uint8, windowSize)
-
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			// Collect values in the kernel window
-			idx := 0
-			for ky := -radius; ky <= radius; ky++ {
-				for kx := -radius; kx <= radius; kx++ {
-					px, py := x+kx, y+ky
-
-					// Clamp to bounds
-					if px < 0 {
-						px = 0
-					}
-					if px >= w {
-						px = w - 1
-					}
-					if py < 0 {
-						py = 0
-					}
-					if py >= h {
-						py = h - 1
-					}
-
-					window[idx] = img.GrayAt(px, py).Y
-					idx++
-				}
-			}
-
-			// Sort and get median
-			sort.Slice(window, func(i, j int) bool {
-				return window[i] < window[j]
-			})
-			median := window[windowSize/2]
-
-			newImg.SetGray(x, y, color.Gray{Y: median})
-		}
-	}
-
-	return newImg
 }
 
 // otsuThreshold calculates optimal threshold using Otsu's method
@@ -374,15 +176,29 @@ func applyThreshold(img *image.Gray, threshold uint8) *image.Gray {
 
 // preprocessImage applies preprocessing pipeline: scale, grayscale, median blur, OTSU threshold
 func preprocessImage(img image.Image) *image.Gray {
-	// Step 1: Scale image using bicubic interpolation (also converts to grayscale)
-	scaled := scaleImageBicubic(img, scaleFactor)
+	bounds := img.Bounds()
+	newW, newH := bounds.Dx()*scaleFactor, bounds.Dy()*scaleFactor
 
-	// Step 2: Apply median blur to reduce noise
-	blurred := medianBlur(scaled, medianKernelSize)
+	// Step 1: Scale image using cubic interpolation (CatmullRom)
+	scaled := imaging.Resize(img, newW, newH, imaging.CatmullRom)
 
-	// Step 3: Apply OTSU thresholding for binary image
-	threshold := otsuThreshold(blurred)
-	binary := applyThreshold(blurred, threshold)
+	// Step 2: Convert to grayscale
+	gray := imaging.Grayscale(scaled)
+
+	// Step 3: Apply median blur to reduce noise
+	blurred := effect.Median(gray, medianRadius)
+
+	// Convert to *image.Gray for OTSU
+	grayImg := image.NewGray(blurred.Bounds())
+	for y := blurred.Bounds().Min.Y; y < blurred.Bounds().Max.Y; y++ {
+		for x := blurred.Bounds().Min.X; x < blurred.Bounds().Max.X; x++ {
+			grayImg.Set(x-blurred.Bounds().Min.X, y-blurred.Bounds().Min.Y, blurred.At(x, y))
+		}
+	}
+
+	// Step 4: Apply OTSU thresholding for binary image
+	threshold := otsuThreshold(grayImg)
+	binary := applyThreshold(grayImg, threshold)
 
 	return binary
 }
