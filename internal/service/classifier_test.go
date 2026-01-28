@@ -188,10 +188,25 @@ func TestClassifierDataset(t *testing.T) {
 	}
 }
 
-func TestBoundingBoxesOutput(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset", "eng")
-	testImage := "PUBLICATIONS016897-6.jpg"
-	imagePath := filepath.Join(datasetPath, testImage)
+func TestBoundingBoxesEng(t *testing.T) {
+	runBoundingBoxesTest(t, "eng", "2024318141.jpg", "eng")
+}
+
+func TestBoundingBoxesImage(t *testing.T) {
+	runBoundingBoxesTest(t, "image", "clouded-sky.jpg", "eng")
+}
+
+func TestBoundingBoxesInscription(t *testing.T) {
+	runBoundingBoxesTest(t, "inscription", "eng_althaus.jpg", "eng")
+}
+
+func TestBoundingBoxesRus(t *testing.T) {
+	runBoundingBoxesTest(t, "rus", "contract01.jpg", "rus")
+}
+
+func runBoundingBoxesTest(t *testing.T, subfolder, filename, lang string) {
+	datasetPath := filepath.Join("..", "..", "test", "dataset", subfolder)
+	imagePath := filepath.Join(datasetPath, filename)
 
 	// Check if image exists
 	if _, err := os.Stat(imagePath); os.IsNotExist(err) {
@@ -214,7 +229,7 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	}
 
 	classifier := NewClassifier()
-	result, err := classifier.DetectText(imageData, "eng")
+	result, err := classifier.DetectText(imageData, lang)
 	if err != nil {
 		t.Fatalf("Failed to detect text: %v", err)
 	}
@@ -222,7 +237,7 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	// Print bounding boxes info
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 90))
-	fmt.Printf("Bounding Boxes for: %s\n", testImage)
+	fmt.Printf("Bounding Boxes for: %s/%s\n", subfolder, filename)
 	fmt.Printf("Image Dimensions: %dx%d\n", width, height)
 	fmt.Printf("Scale Factor: %.2f\n", result.ScaleFactor)
 	fmt.Printf("Overall Confidence: %.4f\n", result.Confidence)
