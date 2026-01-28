@@ -13,7 +13,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unicode/utf8"
 )
 
 const defaultWorkers = 6
@@ -194,10 +193,3 @@ func runDatasetTest(t *testing.T, subfolder string) {
 	}
 }
 
-func truncateString(s string, maxLen int) string {
-	if utf8.RuneCountInString(s) <= maxLen {
-		return s
-	}
-	runes := []rune(s)
-	return string(runes[:maxLen-3]) + "..."
-}
