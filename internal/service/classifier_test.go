@@ -13,12 +13,13 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 const defaultWorkers = 6
 
 func TestClassifierDataset(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset", "eng")
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "rus")
 
 	// Check if dataset directory exists
 	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
@@ -242,8 +243,9 @@ func TestBoundingBoxesOutput(t *testing.T) {
 }
 
 func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	runes := []rune(s)
+	return string(runes[:maxLen-3]) + "..."
 }
