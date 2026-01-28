@@ -164,8 +164,8 @@ func TestClassifierDataset(t *testing.T) {
 }
 
 func TestBoundingBoxesOutput(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset", "image")
-	testImage := "clouded-sky.jpg"
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "eng")
+	testImage := "PUBLICATIONS016897-6.jpg"
 	imagePath := filepath.Join(datasetPath, testImage)
 
 	// Check if image exists
@@ -180,7 +180,7 @@ func TestBoundingBoxesOutput(t *testing.T) {
 	}
 
 	classifier := NewClassifier()
-	result, err := classifier.DetectText(imageData, "rus")
+	result, err := classifier.DetectText(imageData, "eng")
 	if err != nil {
 		t.Fatalf("Failed to detect text: %v", err)
 	}

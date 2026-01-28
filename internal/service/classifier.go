@@ -50,9 +50,10 @@ const (
 
 	// Image size thresholds for dynamic scaling
 	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
-	oneMegapixel    = 1_048_576         // 1 MP
+	halfMegapixel   = 524_288           // 0.5 MP
+	oneMegapixel    = 2 * halfMegapixel // 1 MP
 	twoMegapixels   = 2 * oneMegapixel  // 2 MP
-	fourMegapixels  = 4 * oneMegapixel  // 4 MP
+	threeMegapixels = 3 * oneMegapixel  // 3 MP
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -196,18 +197,21 @@ func preprocessImage(img image.Image) *image.Gray {
 	// Calculate target dimensions based on megapixels
 	var newW, newH int
 	switch {
+	case pixels < halfMegapixel:	
+		// Less than 0.5 MP: scale 4x
+		newW, newH = w*4, h*4
 	case pixels < oneMegapixel:
 		// Less than 1 MP: scale 3x
 		newW, newH = w*3, h*3
 	case pixels < twoMegapixels:
-		// Less than 2 MP: scale 2x
-		newW, newH = w*2, h*2
-	case pixels <= fourMegapixels:
-		// 2-4 MP: no scaling
+		// Less than 2 MP: scale 1.5x
+		newW, newH = w*3/2, h*3/2
+	case pixels <= threeMegapixels:
+		// 2-3 MP: no scaling
 		newW, newH = w, h
 	default:
-		// More than 4 MP: scale down to 4 MP
-		scale := math.Sqrt(float64(fourMegapixels) / float64(pixels))
+		// More than 3 MP: scale down to 3 MP
+		scale := math.Sqrt(float64(threeMegapixels) / float64(pixels))
 		newW = int(float64(w) * scale)
 		newH = int(float64(h) * scale)
 	}
