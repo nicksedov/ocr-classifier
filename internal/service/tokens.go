@@ -21,7 +21,7 @@ func countTokens(s string) int {
 		}
 
 		// Check for dot or comma between digits
-		if r == '.' || r == ',' {
+		if r == '.' || r == ',' || r == ':' || r == '/' {
 			if i > 0 && i < len(runes)-1 && unicode.IsDigit(runes[i-1]) && unicode.IsDigit(runes[i+1]) {
 				count++
 			}
@@ -37,7 +37,7 @@ func countTokens(s string) int {
 		}
 
 		// Check for degree symbol after a digit
-		if r == '°' {
+		if r == '%' || r == '°' {
 			if i > 0 && unicode.IsDigit(runes[i-1]) {
 				count++
 			}
