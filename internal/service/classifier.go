@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"sync"
 	"unicode"
 
@@ -45,8 +46,13 @@ func NewClassifier() *Classifier {
 const (
 	confidenceThreshold = 0.65
 	numWorkers          = 4
-	scaleFactor         = 3  // Scale factor for preprocessing
-	medianRadius        = 1.0   // Radius for median blur (kernel size 3 = radius 1)
+	medianRadius        = 1.0 // Radius for median blur (kernel size 3 = radius 1)
+
+	// Image size thresholds for dynamic scaling
+	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
+	oneMegapixel    = 1_048_576         // 1 MP
+	twoMegapixels   = 2 * oneMegapixel  // 2 MP
+	fourMegapixels  = 4 * oneMegapixel  // 4 MP
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -176,9 +182,35 @@ func applyThreshold(img *image.Gray, threshold uint8) *image.Gray {
 }
 
 // preprocessImage applies preprocessing pipeline: scale, grayscale, median blur, OTSU threshold
+// Returns nil if image is too small to process
 func preprocessImage(img image.Image) *image.Gray {
 	bounds := img.Bounds()
-	newW, newH := int(float64(bounds.Dx()) * scaleFactor), int(float64(bounds.Dy()) * scaleFactor)
+	w, h := bounds.Dx(), bounds.Dy()
+	pixels := w * h
+
+	// Skip images with any dimension too small to process
+	if w <= minDimension || h <= minDimension {
+		return nil
+	}
+
+	// Calculate target dimensions based on megapixels
+	var newW, newH int
+	switch {
+	case pixels < oneMegapixel:
+		// Less than 1 MP: scale 3x
+		newW, newH = w*3, h*3
+	case pixels < twoMegapixels:
+		// Less than 2 MP: scale 2x
+		newW, newH = w*2, h*2
+	case pixels <= fourMegapixels:
+		// 2-4 MP: no scaling
+		newW, newH = w, h
+	default:
+		// More than 4 MP: scale down to 4 MP
+		scale := math.Sqrt(float64(fourMegapixels) / float64(pixels))
+		newW = int(float64(w) * scale)
+		newH = int(float64(h) * scale)
+	}
 
 	// Step 1: Scale image using cubic interpolation (CatmullRom)
 	scaled := imaging.Resize(img, newW, newH, imaging.CatmullRom)
@@ -296,8 +328,13 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		return result, nil
 	}
 
-	// Preprocess: scale 3x with bicubic interpolation, grayscale, median blur, OTSU threshold
+	// Preprocess: dynamic scaling, grayscale, median blur
 	preprocessed := preprocessImage(img)
+
+	// If image is too small, return empty result
+	if preprocessed == nil {
+		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+	}
 
 	// Encode preprocessed image for OCR
 	preprocessedData, err := encodeImage(preprocessed, "png")
