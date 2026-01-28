@@ -19,7 +19,7 @@ import (
 const defaultWorkers = 6
 
 func TestClassifierDataset(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset", "rus")
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "eng")
 
 	// Check if dataset directory exists
 	if _, err := os.Stat(datasetPath); os.IsNotExist(err) {
@@ -164,8 +164,8 @@ func TestClassifierDataset(t *testing.T) {
 	// Print results table
 	fmt.Println()
 	fmt.Println(strings.Repeat("=", 135))
-	fmt.Printf("%-30s | %-12s | %-12s | %-6s | %-6s | %-12s | %-6s | %-6s\n",
-		"File", "Dimensions", "English", "Angle", "Scale", "Russian", "Angle", "Scale")
+	fmt.Printf("%-30s | %-12s | %-6s | %-12s | %-6s | %-12s | %-6s\n",
+		"File", "Dimensions", "Scale", "English", "Angle", "Russian", "Angle")
 	fmt.Println(strings.Repeat("-", 135))
 
 	for _, r := range results {
@@ -173,8 +173,8 @@ func TestClassifierDataset(t *testing.T) {
 			fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
 		} else {
 			dims := fmt.Sprintf("%dx%d", r.width, r.height)
-			fmt.Printf("%-30s | %-12s | %-12.4f | %-6d | %-6.2f | %-12.4f | %-6d | %-6.2f\n",
-				r.file, dims, r.confidenceEng, r.angleEng, r.scaleFactorEng, r.confidenceRus, r.angleRus, r.scaleFactorRus)
+			fmt.Printf("%-30s | %-12s | %-6.2f | %-12.4f | %-6d | %-12.4f | %-6d\n",
+				r.file, dims, r.scaleFactorEng, r.confidenceEng, r.angleEng, r.confidenceRus, r.angleRus)
 		}
 	}
 
@@ -193,7 +193,7 @@ func TestBoundingBoxesEng(t *testing.T) {
 }
 
 func TestBoundingBoxesImage(t *testing.T) {
-	runBoundingBoxesTest(t, "image", "clouded-sky.jpg", "eng")
+	runBoundingBoxesTest(t, "image", "clouded-sky.jpg", "rus")
 }
 
 func TestBoundingBoxesInscription(t *testing.T) {
