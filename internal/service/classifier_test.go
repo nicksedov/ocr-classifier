@@ -164,8 +164,8 @@ func TestClassifierDataset(t *testing.T) {
 }
 
 func TestBoundingBoxesOutput(t *testing.T) {
-	datasetPath := filepath.Join("..", "..", "test", "dataset", "rus")
-	testImage := "penalty_form.jpg"
+	datasetPath := filepath.Join("..", "..", "test", "dataset", "image")
+	testImage := "clouded-sky.jpg"
 	imagePath := filepath.Join(datasetPath, testImage)
 
 	// Check if image exists
@@ -210,5 +210,5 @@ func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen-3] + "..."
+	return s[:maxLen] + "..."
 }

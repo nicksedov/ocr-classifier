@@ -43,8 +43,8 @@ func NewClassifier() *Classifier {
 
 const (
 	confidenceThreshold = 0.65
-	numWorkers          = 3
-	scaleFactor         = 1.25  // Scale factor for preprocessing
+	numWorkers          = 4
+	scaleFactor         = 3  // Scale factor for preprocessing
 	medianRadius        = 1.0   // Radius for median blur (kernel size 3 = radius 1)
 )
 
@@ -231,6 +231,9 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 	resultBoxes := make([]BoundingBox, 0, len(boxes))
 
 	for _, box := range boxes {
+		if box.Confidence == 0 {
+			continue
+		}
 		totalConfidence += float64(box.Confidence)
 		resultBoxes = append(resultBoxes, BoundingBox{
 			X:          box.Box.Min.X,
@@ -242,7 +245,7 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 		})
 	}
 
-	avgConfidence := totalConfidence / float64(len(boxes))
+	avgConfidence := totalConfidence / float64(len(resultBoxes))
 	normalizedConfidence := avgConfidence / 100.0
 
 	if normalizedConfidence > 1.0 {
