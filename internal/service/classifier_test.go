@@ -32,16 +32,15 @@ func TestClassifierDataset(t *testing.T) {
 	}
 
 	type result struct {
-		file           string
-		width          int
-		height         int
-		confidenceEng  float64
-		confidenceRus  float64
-		angleEng       int
-		angleRus       int
-		scaleFactorEng float64
-		scaleFactorRus float64
-		err            error
+		file          string
+		width         int
+		height        int
+		scaleFactor   float64
+		confidenceEng float64
+		confidenceRus float64
+		angleEng      int
+		angleRus      int
+		err           error
 	}
 
 	// Collect all image files
@@ -120,15 +119,14 @@ func TestClassifierDataset(t *testing.T) {
 				}
 
 				resultsChan <- result{
-					file:           j.relPath,
-					width:          width,
-					height:         height,
-					confidenceEng:  resEng.Confidence,
-					confidenceRus:  resRus.Confidence,
-					angleEng:       resEng.Angle,
-					angleRus:       resRus.Angle,
-					scaleFactorEng: resEng.ScaleFactor,
-					scaleFactorRus: resRus.ScaleFactor,
+					file:          j.relPath,
+					width:         width,
+					height:        height,
+					scaleFactor:   resEng.ScaleFactor,
+					confidenceEng: resEng.Confidence,
+					confidenceRus: resRus.Confidence,
+					angleEng:      resEng.Angle,
+					angleRus:      resRus.Angle,
 				}
 			}
 		}()
@@ -174,7 +172,7 @@ func TestClassifierDataset(t *testing.T) {
 		} else {
 			dims := fmt.Sprintf("%dx%d", r.width, r.height)
 			fmt.Printf("%-30s | %-12s | %-6.2f | %-12.4f | %-6d | %-12.4f | %-6d\n",
-				r.file, dims, r.scaleFactorEng, r.confidenceEng, r.angleEng, r.confidenceRus, r.angleRus)
+				r.file, dims, r.scaleFactor, r.confidenceEng, r.angleEng, r.confidenceRus, r.angleRus)
 		}
 	}
 
