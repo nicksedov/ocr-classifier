@@ -54,21 +54,8 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get language parameter (default to English)
-	lang := r.URL.Query().Get("lang")
-	if lang == "" {
-		lang = "eng"
-	}
-
-	// Validate language
-	if !service.SupportedLanguages[lang] {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "unsupported language, use: eng, rus"})
-		return
-	}
-
 	// Perform classification
-	result, err := h.classifier.DetectText(imageData, lang)
+	result, err := h.classifier.DetectText(imageData)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to process image"})

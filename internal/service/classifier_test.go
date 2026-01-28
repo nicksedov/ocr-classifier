@@ -32,19 +32,15 @@ func TestClassifierDataset(t *testing.T) {
 	}
 
 	type result struct {
-		file            string
-		width           int
-		height          int
-		scaleFactor     float64
-		meanConfEng     float64
-		weightedConfEng float64
-		tokenCountEng   int
-		meanConfRus     float64
-		weightedConfRus float64
-		tokenCountRus   int
-		angleEng        int
-		angleRus        int
-		err             error
+		file           string
+		width          int
+		height         int
+		scaleFactor    float64
+		meanConf       float64
+		weightedConf   float64
+		tokenCount     int
+		angle          int
+		err            error
 	}
 
 	// Collect all image files
@@ -106,35 +102,21 @@ func TestClassifierDataset(t *testing.T) {
 					height = bounds.Dy()
 				}
 
-				resEng, errEng := classifier.DetectText(imageData, "eng")
+				resEng, errEng := classifier.DetectText(imageData)
 				if errEng != nil {
 					resultsChan <- result{file: j.relPath, err: errEng}
 					continue
 				}
 
-				resRus := &ClassifierResult{}
-				if resEng.WeightedConfidence < confidenceThreshold {
-					r, errRus := classifier.DetectText(imageData, "rus")
-					if errRus != nil {
-						resultsChan <- result{file: j.relPath, err: errRus}
-						continue
-					}
-					resRus = r
-				}
-
 				resultsChan <- result{
-					file:            j.relPath,
-					width:           width,
-					height:          height,
-					scaleFactor:     resEng.ScaleFactor,
-					meanConfEng:     resEng.MeanConfidence,
-					weightedConfEng: resEng.WeightedConfidence,
-					tokenCountEng:   resEng.TokenCount,
-					meanConfRus:     resRus.MeanConfidence,
-					weightedConfRus: resRus.WeightedConfidence,
-					tokenCountRus:   resRus.TokenCount,
-					angleEng:        resEng.Angle,
-					angleRus:        resRus.Angle,
+					file:         j.relPath,
+					width:        width,
+					height:       height,
+					scaleFactor:  resEng.ScaleFactor,
+					meanConf:     resEng.MeanConfidence,
+					weightedConf: resEng.WeightedConfidence,
+					tokenCount:   resEng.TokenCount,
+					angle:        resEng.Angle,
 				}
 			}
 		}()
@@ -169,23 +151,22 @@ func TestClassifierDataset(t *testing.T) {
 
 	// Print results table
 	fmt.Println()
-	fmt.Println(strings.Repeat("=", 175))
-	fmt.Printf("%-30s | %-12s | %-6s | %-8s | %-8s | %-6s | %-6s | %-8s | %-8s | %-6s | %-6s\n",
-		"File", "Dimensions", "Scale", "MeanEng", "WghtEng", "TokEng", "AngEng", "MeanRus", "WghtRus", "TokRus", "AngRus")
-	fmt.Println(strings.Repeat("-", 175))
+	fmt.Println(strings.Repeat("=", 120))
+	fmt.Printf("%-30s | %-12s | %-6s | %-10s | %-10s | %-8s | %-6s\n",
+		"File", "Dimensions", "Scale", "MeanConf", "WeightConf", "Tokens", "Angle")
+	fmt.Println(strings.Repeat("-", 120))
 
 	for _, r := range results {
 		if r.err != nil {
 			fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
 		} else {
 			dims := fmt.Sprintf("%dx%d", r.width, r.height)
-			fmt.Printf("%-30s | %-12s | %-6.2f | %-8.4f | %-8.4f | %-6d | %-6d | %-8.4f | %-8.4f | %-6d | %-6d\n",
-				r.file, dims, r.scaleFactor, r.meanConfEng, r.weightedConfEng, r.tokenCountEng, r.angleEng,
-				r.meanConfRus, r.weightedConfRus, r.tokenCountRus, r.angleRus)
+			fmt.Printf("%-30s | %-12s | %-6.2f | %-10.4f | %-10.4f | %-8d | %-6d\n",
+				r.file, dims, r.scaleFactor, r.meanConf, r.weightedConf, r.tokenCount, r.angle)
 		}
 	}
 
-	fmt.Println(strings.Repeat("=", 175))
+	fmt.Println(strings.Repeat("=", 120))
 	fmt.Printf("Total files: %d, Processed: %d, Errors: %d, Workers: %d\n", len(results), processedCount, errorCount, numWorkers)
 	fmt.Printf("Processing time: %v\n", time.Since(timestamp))
 	fmt.Println()
@@ -196,22 +177,22 @@ func TestClassifierDataset(t *testing.T) {
 }
 
 func TestBoundingBoxesEng(t *testing.T) {
-	runBoundingBoxesTest(t, "eng", "2024318141.jpg", "eng")
+	runBoundingBoxesTest(t, "eng", "2024318141.jpg")
 }
 
 func TestBoundingBoxesImage(t *testing.T) {
-	runBoundingBoxesTest(t, "image", "clouded-sky.jpg", "rus")
+	runBoundingBoxesTest(t, "image", "clouded-sky.jpg")
 }
 
 func TestBoundingBoxesInscription(t *testing.T) {
-	runBoundingBoxesTest(t, "inscription", "eng_althaus.jpg", "eng")
+	runBoundingBoxesTest(t, "inscription", "eng_althaus.jpg")
 }
 
 func TestBoundingBoxesRus(t *testing.T) {
-	runBoundingBoxesTest(t, "rus", "passportscan02.png", "rus")
+	runBoundingBoxesTest(t, "rus", "passportscan02.png")
 }
 
-func runBoundingBoxesTest(t *testing.T, subfolder, filename, lang string) {
+func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
 	datasetPath := filepath.Join("..", "..", "test", "dataset", subfolder)
 	imagePath := filepath.Join(datasetPath, filename)
 
@@ -236,7 +217,7 @@ func runBoundingBoxesTest(t *testing.T, subfolder, filename, lang string) {
 	}
 
 	classifier := NewClassifier()
-	result, err := classifier.DetectText(imageData, lang)
+	result, err := classifier.DetectText(imageData)
 	if err != nil {
 		t.Fatalf("Failed to detect text: %v", err)
 	}

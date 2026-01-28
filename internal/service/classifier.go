@@ -16,12 +16,6 @@ import (
 	"github.com/otiai10/gosseract/v2"
 )
 
-// Supported languages for OCR
-var SupportedLanguages = map[string]bool{
-	"eng": true, // English
-	"rus": true, // Russian
-}
-
 type BoundingBox struct {
 	X          int     `json:"x"`
 	Y          int     `json:"y"`
@@ -184,12 +178,12 @@ func countTokens(s string) int {
 	return count
 }
 
-// detectTextSingle performs OCR on a single image
-func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*ClassifierResult, error) {
+// detectTextSingle performs OCR on a single image using English and Russian
+func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
 	defer client.Close()
 
-	if err := client.SetLanguage(lang); err != nil {
+	if err := client.SetLanguage("eng+rus"); err != nil {
 		return nil, err
 	}
 
@@ -269,17 +263,12 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 	}, nil
 }
 
-func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResult, error) {
-	// Set default language
-	if lang == "" {
-		lang = "eng"
-	}
-
+func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 	// Decode the original image
 	img, _, err := image.Decode(bytes.NewReader(imageData))
 	if err != nil {
 		// If we can't decode, try raw OCR
-		result, ocrErr := c.detectTextSingle(imageData, lang)
+		result, ocrErr := c.detectTextSingle(imageData)
 		if ocrErr != nil {
 			return nil, ocrErr
 		}
@@ -303,7 +292,7 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 	}
 
 	// Phase 1: Try without rotation on preprocessed image
-	result, err := c.detectTextSingle(preprocessedData, lang)
+	result, err := c.detectTextSingle(preprocessedData)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +343,7 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 						continue
 					}
 
-					res, detectErr := c.detectTextSingle(data, lang)
+					res, detectErr := c.detectTextSingle(data)
 					if detectErr != nil {
 						resultsChan <- rotationResult{angle: angle, err: detectErr}
 						continue
