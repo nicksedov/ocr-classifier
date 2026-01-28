@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"sync"
+	"unicode"
 
 	"github.com/anthonynsimon/bild/effect"
 	"github.com/disintegration/imaging"
@@ -205,6 +206,16 @@ func preprocessImage(img image.Image) *image.Gray {
 	//return binary
 }
 
+// containsLetters checks if a string contains Latin or Cyrillic letters
+func containsLetters(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Latin, r) || unicode.Is(unicode.Cyrillic, r) {
+			return true
+		}
+	}
+	return false
+}
+
 // detectTextSingle performs OCR on a single image
 func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
@@ -234,6 +245,10 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 		if box.Confidence == 0 {
 			continue
 		}
+		// Filter: only include boxes with Latin or Cyrillic letters
+		if !containsLetters(box.Word) {
+			continue
+		}
 		totalConfidence += float64(box.Confidence)
 		resultBoxes = append(resultBoxes, BoundingBox{
 			X:          box.Box.Min.X,
@@ -243,6 +258,11 @@ func (c *Classifier) detectTextSingle(imageData []byte, lang string) (*Classifie
 			Word:       box.Word,
 			Confidence: float64(box.Confidence) / 100.0,
 		})
+	}
+
+	// Handle case where no valid boxes found after filtering
+	if len(resultBoxes) == 0 {
+		return &ClassifierResult{Confidence: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
 	}
 
 	avgConfidence := totalConfidence / float64(len(resultBoxes))
