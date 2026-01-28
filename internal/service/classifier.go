@@ -43,8 +43,20 @@ func NewClassifier() *Classifier {
 const (
 	confidenceThreshold = 0.65
 	numWorkers          = 3
-	angleStep           = 15
 )
+
+// Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
+// Note: 0 is tested in Phase 1, so excluded here
+var phase2Angles = []int{
+	// Deviations from 0 (350, 355, 5, 10)
+	350, 355, 5, 10,
+	// 90 and deviations
+	80, 85, 90, 95, 100,
+	// 180 and deviations
+	170, 175, 180, 185, 190,
+	// 270 and deviations
+	260, 265, 270, 275, 280,
+}
 
 // rotateImage rotates an image by the specified angle in degrees
 func rotateImage(img image.Image, angleDeg int) image.Image {
@@ -225,12 +237,8 @@ func (c *Classifier) DetectText(imageData []byte, lang string) (*ClassifierResul
 		return result, nil
 	}
 
-	// Phase 2: Try rotations with 15-degree increments using 3 workers
-	// Generate angles: 15, 30, 45, ... 345 (excluding 0 which was done in Phase 1)
-	var angles []int
-	for a := angleStep; a < 360; a += angleStep {
-		angles = append(angles, a)
-	}
+	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
+	angles := phase2Angles
 
 	type rotationResult struct {
 		angle  int
