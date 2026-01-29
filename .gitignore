@@ -34,3 +34,5 @@ go.sum
 # Editor/IDE
 .idea/
 .vscode/
+.quoder/
+.serena/
