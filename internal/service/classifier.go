@@ -40,8 +40,8 @@ func NewClassifier() *Classifier {
 }
 
 const (
-	confidenceThreshold = 0.66 // Further OCR attempts will be stopped once the confidence threshold is reached
-	numWorkers          = 4
+	DefaultConfidenceThreshold = 0.66 // Default confidence threshold, can be overridden via API parameter
+	numWorkers                 = 4
 )
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
@@ -148,7 +148,12 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 	}, nil
 }
 
-func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
+func (c *Classifier) DetectText(imageData []byte, confidenceThreshold float64) (*ClassifierResult, error) {
+	// Use default threshold if not specified or invalid
+	if confidenceThreshold <= 0 || confidenceThreshold > 1 {
+		confidenceThreshold = DefaultConfidenceThreshold
+	}
+
 	// Decode the original image
 	img, _, err := image.Decode(bytes.NewReader(imageData))
 	if err != nil {
@@ -190,10 +195,10 @@ func (c *Classifier) DetectText(imageData []byte) (*ClassifierResult, error) {
 
 	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
 	// Rotations are applied to the preprocessed image
-	return c.detectTextWithRotations(preprocessed, scaleFactor, result)
+	return c.detectTextWithRotations(preprocessed, scaleFactor, result, confidenceThreshold)
 }
 
-func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult) (*ClassifierResult, error) {
+func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, confidenceThreshold float64) (*ClassifierResult, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -207,7 +212,7 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, scaleFactor)
+			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, scaleFactor, confidenceThreshold)
 		}()
 	}
 
@@ -251,7 +256,7 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 	return bestResult, nil
 }
 
-func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, scaleFactor float64) {
+func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, scaleFactor float64, confidenceThreshold float64) {
 	for {
 		select {
 		case <-ctx.Done():

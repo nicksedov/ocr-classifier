@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Умный поиск в облачном хранилище "Диск" - Архитектура</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #1a5276;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #2c3e50;
+            margin-top: 40px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #34495e;
+            margin-top: 25px;
+        }
+        .section {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .diagram-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 25px 0;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        .diagram-title {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px dashed #bdc3c7;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+        }
+        .component-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .component-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        .component-card.green {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            box-shadow: 0 4px 15px rgba(17, 153, 142, 0.3);
+        }
+        .component-card.orange {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+        }
+        .component-card h4 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+        }
+        .component-card ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .component-card li {
+            margin: 5px 0;
+        }
+        .lifecycle-step {
+            display: flex;
+            align-items: center;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .step-number {
+            background: #3498db;
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .highlight-box {
+            background: linear-gradient(135deg, #e8f4f8 0%, #d4edda 100%);
+            border: 1px solid #28a745;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .highlight-box h4 {
+            color: #155724;
+            margin-top: 0;
+        }
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .tech-badge {
+            background: #2c3e50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+        }
+        .tech-badge.storage {
+            background: #e74c3c;
+        }
+        .tech-badge.service {
+            background: #27ae60;
+        }
+        .tech-badge.api {
+            background: #9b59b6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Умный поиск в облачном хранилище "Диск"</h1>
+
+    <div class="section">
+        <h2>Обзор решения</h2>
+        <p>
+            Система умного поиска позволяет пользователям облачного хранилища "Диск" осуществлять 
+            семантический поиск по содержимому загруженных документов. Решение интегрирует несколько 
+            компонентов для обработки, классификации и индексации документов различных форматов.
+        </p>
+        
+        <h3>Поддерживаемые форматы документов</h3>
+        <div class="tech-stack">
+            <span class="tech-badge">Office (DOC, DOCX, XLS, XLSX, PPT, PPTX)</span>
+            <span class="tech-badge">PDF</span>
+            <span class="tech-badge">Изображения (JPG, PNG)</span>
+        </div>
+
+        <h3>Ключевые возможности</h3>
+        <ul>
+            <li>Автоматическая классификация изображений на наличие текстового контента</li>
+            <li>Извлечение текста из документов всех поддерживаемых форматов</li>
+            <li>Семантическая индексация с использованием векторных эмбеддингов</li>
+            <li>Поиск по смыслу запроса, а не только по ключевым словам</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Архитектура системы</h2>
+        
+        <p>Система построена на базе платформы <strong>GigaSearch IDP</strong> и состоит из трех основных модулей:</p>
+        
+        <div class="component-list">
+            <div class="component-card">
+                <h4>Data Enrichment</h4>
+                <ul>
+                    <li>OCR распознавание</li>
+                    <li>Парсинг файлов</li>
+                    <li>Text Splitting (чанкинг)</li>
+                    <li>Генерация эмбеддингов</li>
+                    <li>Генерация FAQ</li>
+                </ul>
+            </div>
+            <div class="component-card green">
+                <h4>Universal Indexer</h4>
+                <ul>
+                    <li>Создание поисковых индексов</li>
+                    <li>Обновление индексов</li>
+                    <li>Хранение чанков в S3</li>
+                    <li>Управление DataVersion</li>
+                </ul>
+            </div>
+            <div class="component-card orange">
+                <h4>Universal Search</h4>
+                <ul>
+                    <li>Семантический поиск</li>
+                    <li>Reranking результатов</li>
+                    <li>Генерация ответа через LLM</li>
+                    <li>Работа с источниками</li>
+                </ul>
+            </div>
+        </div>
+
+        <h3>Технологический стек</h3>
+        <div class="tech-stack">
+            <span class="tech-badge storage">S3 (чанки)</span>
+            <span class="tech-badge storage">Qdrant (векторы)</span>
+            <span class="tech-badge service">OCR Classifier</span>
+            <span class="tech-badge api">GigaSearch IDP API</span>
+            <span class="tech-badge api">GigaChat LLM</span>
+        </div>
+    </div>
+
+    <h2>Жизненный цикл загрузки данных</h2>
+    
+    <div class="section">
+        <div class="lifecycle-step">
+            <div class="step-number">1</div>
+            <div>Пользователь загружает на Диск офисный документ, PDF или изображение (JPG/PNG)</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">2</div>
+            <div>Документ сохраняется во внутреннем хранилище Диска</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">3</div>
+            <div>Для изображений (JPG/PNG) выполняется бинарная классификация через <code>ocr-classifier /classify</code> — определяется, содержит ли изображение текстовый документ</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">4</div>
+            <div>Текстовые документы (Office, PDF, изображения с текстом) отправляются в GigaSearch IDP для распознавания и индексации</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">5</div>
+            <div>Сформированные чанки сохраняются в S3, векторные эмбеддинги — в Qdrant</div>
+        </div>
+    </div>
+
+    <div class="diagram-container">
+        <div class="diagram-title">Диаграмма: Жизненный цикл загрузки данных</div>
+        <pre class="mermaid">
+flowchart TD
+    subgraph user [Пользователь]
+        U[Загрузка файла]
+    end
+
+    subgraph disk [Облачное хранилище Диск]
+        D1[Приём файла]
+        D2[(Внутреннее хранилище)]
+        D3{Тип файла?}
+        D4[Отправка на классификацию]
+        D5[Отправка на индексацию]
+    end
+
+    subgraph ocr [OCR Classifier]
+        O1[POST /classify]
+        O2{Содержит текст?}
+    end
+
+    subgraph enrichment [GigaSearch IDP: Data Enrichment]
+        G1[OCR и Parsing]
+        G2[Text Splitting]
+        G3[Генерация эмбеддингов]
+    end
+
+    subgraph indexer [GigaSearch IDP: Universal Indexer]
+        G4[Создание индекса]
+        G5[Сохранение DataVersion]
+    end
+
+    subgraph storage [База знаний]
+        S1[(S3 Чанки)]
+        S2[(Qdrant Векторы)]
+    end
+
+    U --> D1
+    D1 --> D2
+    D2 --> D3
+    
+    D3 -->|Office, PDF| D5
+    D3 -->|JPG, PNG| D4
+    
+    D4 --> O1
+    O1 --> O2
+    O2 -->|Да| D5
+    O2 -->|Нет| END1[Не индексировать]
+    
+    D5 --> G1
+    G1 --> G2
+    G2 --> G3
+    G3 --> G4
+    G4 --> G5
+    
+    G5 --> S1
+    G5 --> S2
+
+    style user fill:#e3f2fd,stroke:#1976d2
+    style disk fill:#fff3e0,stroke:#ff9800
+    style ocr fill:#f3e5f5,stroke:#9c27b0
+    style enrichment fill:#e8f5e9,stroke:#4caf50
+    style indexer fill:#c8e6c9,stroke:#388e3c
+    style storage fill:#ffebee,stroke:#f44336
+    style END1 fill:#eceff1,stroke:#607d8b
+        </pre>
+    </div>
+
+    <div class="highlight-box">
+        <h4>Роль OCR Classifier в процессе загрузки</h4>
+        <p>
+            Микросервис <code>ocr-classifier</code> решает задачу бинарной классификации для изображений: 
+            определяет, является ли загруженное изображение фотографией текстового документа (скан, фото документа) 
+            или обычной фотографией/картинкой без значимого текстового содержимого.
+        </p>
+        <p>
+            Это позволяет избежать ненужной индексации изображений без текста и оптимизировать 
+            использование ресурсов платформы GigaSearch IDP.
+        </p>
+    </div>
+
+    <h2>Жизненный цикл умного поиска</h2>
+
+    <div class="section">
+        <div class="lifecycle-step">
+            <div class="step-number">1</div>
+            <div>Пользователь вводит поисковый запрос в свободной форме через UI Диска</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">2</div>
+            <div>Система выполняет семантический поиск релевантных документов через GigaSearch IDP API</div>
+        </div>
+        <div class="lifecycle-step">
+            <div class="step-number">3</div>
+            <div>Результаты ранжируются (Reranker) и возвращаются пользователю</div>
+        </div>
+    </div>
+
+    <div class="diagram-container">
+        <div class="diagram-title">Диаграмма: Жизненный цикл умного поиска</div>
+        <pre class="mermaid">
+flowchart LR
+    subgraph user [Пользователь]
+        U1[Ввод запроса]
+        U2[Просмотр результатов]
+    end
+
+    subgraph disk [Облачное хранилище Диск]
+        D1[UI поиска]
+        D2[Запрос к API]
+        D3[Отображение]
+    end
+
+    subgraph gigasearch [GigaSearch IDP: Universal Search]
+        G1[Приём запроса]
+        G2[Эмбеддинг запроса]
+        G3[Векторный поиск]
+        G4[Reranking]
+        G5[Ответ]
+    end
+
+    subgraph storage [База знаний]
+        S1[(S3 Чанки)]
+        S2[(Qdrant Векторы)]
+    end
+
+    U1 --> D1
+    D1 --> D2
+    D2 --> G1
+    G1 --> G2
+    G2 --> G3
+    G3 --> G4
+    G4 --> G5
+    
+    S2 -.->|Поиск| G3
+    S1 -.->|Извлечение| G4
+    
+    G5 --> D3
+    D3 --> U2
+
+    style user fill:#e3f2fd,stroke:#1976d2
+    style disk fill:#fff3e0,stroke:#ff9800
+    style gigasearch fill:#e8f5e9,stroke:#4caf50
+    style storage fill:#ffebee,stroke:#f44336
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>Жизненный цикл данных в GigaSearch IDP</h2>
+        <p>Полный цикл обработки данных в платформе включает следующие этапы:</p>
+        
+        <div class="diagram-container">
+            <pre class="mermaid">
+flowchart LR
+    A[Загрузка данных] --> B[OCR]
+    B --> C[Parsing]
+    C --> D[Text Splitting]
+    D --> E[Embeddings]
+    E --> F[DataVersion]
+    F --> G[Индексация]
+    G --> H[Поиск]
+    H --> I[Генерация ответа]
+
+    style A fill:#bbdefb
+    style B fill:#c8e6c9
+    style C fill:#c8e6c9
+    style D fill:#c8e6c9
+    style E fill:#c8e6c9
+    style F fill:#fff9c4
+    style G fill:#fff9c4
+    style H fill:#ffccbc
+    style I fill:#ffccbc
+            </pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Интеграционные точки</h2>
+        
+        <h3>OCR Classifier API</h3>
+        <table style="width:100%; border-collapse: collapse; margin: 15px 0;">
+            <tr style="background: #3498db; color: white;">
+                <th style="padding: 12px; text-align: left;">Эндпоинт</th>
+                <th style="padding: 12px; text-align: left;">Метод</th>
+                <th style="padding: 12px; text-align: left;">Назначение</th>
+            </tr>
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px;"><code>/classify</code></td>
+                <td style="padding: 12px;">POST</td>
+                <td style="padding: 12px;">Бинарная классификация изображения на наличие текстового документа</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 12px;"><code>/health</code></td>
+                <td style="padding: 12px;">GET</td>
+                <td style="padding: 12px;">Проверка работоспособности сервиса</td>
+            </tr>
+        </table>
+
+        <h3>GigaSearch IDP API</h3>
+        <p>Платформа предоставляет API для:</p>
+        <ul>
+            <li>Загрузки данных из различных источников (файлы, FAQ, текстовые массивы)</li>
+            <li>Управления индексами и DataVersion</li>
+            <li>Выполнения семантического поиска</li>
+            <li>Генерации ответов через LLM GigaChat</li>
+            <li>Реализации чат-скиллов поверх индекса</li>
+        </ul>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                nodeSpacing: 50,
+                rankSpacing: 50
+            }
+        });
+    </script>
+</body>
+</html>

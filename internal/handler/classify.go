@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 
 	"ocr-classifier/internal/service"
 )
@@ -54,8 +55,16 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse confidence_threshold from URL parameter (default: 0.66)
+	confidenceThreshold := service.DefaultConfidenceThreshold
+	if thresholdStr := r.URL.Query().Get("confidence_threshold"); thresholdStr != "" {
+		if val, err := strconv.ParseFloat(thresholdStr, 64); err == nil && val > 0 && val <= 1 {
+			confidenceThreshold = val
+		}
+	}
+
 	// Perform classification
-	result, err := h.classifier.DetectText(imageData)
+	result, err := h.classifier.DetectText(imageData, confidenceThreshold)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to process image"})

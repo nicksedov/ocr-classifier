@@ -7,7 +7,7 @@ import "unicode"
 // - Digits
 // - Dot/comma between digits (e.g., "3.14", "1,000")
 // - Plus/minus before a number (e.g., "+5", "-10")
-// - Degree symbol after a number (e.g., "45°")
+// - Percent, promille, degree, minute, second symbols after a number (e.g., "45°", "30′", "15″", "5‰")
 // - Currency symbols before/after a number (e.g., "$100", "50€")
 func countTokens(s string) int {
 	runes := []rune(s)
@@ -36,8 +36,8 @@ func countTokens(s string) int {
 			continue
 		}
 
-		// Check for degree symbol after a digit
-		if r == '%' || r == '°' {
+		// Check for percent, promille, degree, minute, or second symbol after a digit
+		if r == '%' || r == '‰' || r == '°' || r == '′' || r == '″' {
 			if i > 0 && unicode.IsDigit(runes[i-1]) {
 				count++
 			}

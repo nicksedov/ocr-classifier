@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Classifier - Эндпоинт /classify</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+        }
+        h3 {
+            color: #7f8c8d;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .diagram-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        code {
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        pre.mermaid {
+            background: white;
+            color: #333;
+            padding: 20px;
+        }
+        pre code {
+            background: transparent;
+            padding: 0;
+        }
+        .param-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+        .param-table th, .param-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .param-table th {
+            background: #3498db;
+            color: white;
+        }
+        .param-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px 15px;
+            margin: 15px 0;
+        }
+        .error-code {
+            display: inline-block;
+            background: #e74c3c;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success-code {
+            display: inline-block;
+            background: #27ae60;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>OCR Classifier - Эндпоинт /classify</h1>
+
+    <div class="section">
+        <h2>Описание</h2>
+        <p>
+            Эндпоинт <code>/classify</code> предназначен для классификации изображений на наличие текста 
+            с использованием Tesseract OCR. Сервис анализирует изображение и возвращает детальную информацию 
+            о найденном тексте, включая показатели уверенности (confidence), координаты текстовых блоков 
+            и количество найденных токенов.
+        </p>
+    </div>
+
+    <div class="section">
+        <h2>HTTP-запрос</h2>
+        <pre><code>POST /classify[?confidence_threshold=0.66]
+Content-Type: image/jpeg | image/png
+Body: &lt;бинарные данные изображения&gt;</code></pre>
+
+        <h3>URL-параметры</h3>
+        <table class="param-table">
+            <tr>
+                <th>Параметр</th>
+                <th>Тип</th>
+                <th>По умолчанию</th>
+                <th>Описание</th>
+            </tr>
+            <tr>
+                <td><code>confidence_threshold</code></td>
+                <td>float64</td>
+                <td>0.66</td>
+                <td>Пороговое значение уверенности (0.0 - 1.0). При достижении этого порога дальнейшие попытки OCR с поворотом изображения прекращаются.</td>
+            </tr>
+        </table>
+
+        <h3>Поддерживаемые форматы</h3>
+        <ul>
+            <li><code>image/jpeg</code> - изображения в формате JPEG</li>
+            <li><code>image/png</code> - изображения в формате PNG</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Ответ</h2>
+        
+        <h3><span class="success-code">200 OK</span> - Успешный ответ</h3>
+        <pre><code>{
+  "mean_confidence": 0.85,
+  "weighted_confidence": 0.88,
+  "token_count": 12,
+  "boxes": [
+    {
+      "x": 10,
+      "y": 20,
+      "width": 100,
+      "height": 50,
+      "word": "Example",
+      "confidence": 0.95
+    }
+  ],
+  "angle": 0,
+  "scale_factor": 1.0
+}</code></pre>
+
+        <h3>Параметры ответа</h3>
+        <table class="param-table">
+            <tr>
+                <th>Параметр</th>
+                <th>Тип</th>
+                <th>Описание</th>
+            </tr>
+            <tr>
+                <td><code>mean_confidence</code></td>
+                <td>float64</td>
+                <td>Средняя уверенность распознавания по всем текстовым блокам (0.0 - 1.0)</td>
+            </tr>
+            <tr>
+                <td><code>weighted_confidence</code></td>
+                <td>float64</td>
+                <td>Взвешенная уверенность с учетом количества токенов в каждом блоке (0.0 - 1.0)</td>
+            </tr>
+            <tr>
+                <td><code>token_count</code></td>
+                <td>int</td>
+                <td>Общее количество распознанных токенов (буквы, цифры, спецсимволы)</td>
+            </tr>
+            <tr>
+                <td><code>boxes</code></td>
+                <td>array</td>
+                <td>Массив текстовых блоков с координатами и содержимым</td>
+            </tr>
+            <tr>
+                <td><code>angle</code></td>
+                <td>int</td>
+                <td>Угол поворота изображения для лучшего распознавания (0-359 градусов)</td>
+            </tr>
+            <tr>
+                <td><code>scale_factor</code></td>
+                <td>float64</td>
+                <td>Коэффициент масштабирования, примененный к изображению</td>
+            </tr>
+        </table>
+
+        <h3>Структура BoundingBox</h3>
+        <table class="param-table">
+            <tr>
+                <th>Параметр</th>
+                <th>Тип</th>
+                <th>Описание</th>
+            </tr>
+            <tr>
+                <td><code>x</code></td>
+                <td>int</td>
+                <td>X-координата левого верхнего угла блока</td>
+            </tr>
+            <tr>
+                <td><code>y</code></td>
+                <td>int</td>
+                <td>Y-координата левого верхнего угла блока</td>
+            </tr>
+            <tr>
+                <td><code>width</code></td>
+                <td>int</td>
+                <td>Ширина текстового блока в пикселях</td>
+            </tr>
+            <tr>
+                <td><code>height</code></td>
+                <td>int</td>
+                <td>Высота текстового блока в пикселях</td>
+            </tr>
+            <tr>
+                <td><code>word</code></td>
+                <td>string</td>
+                <td>Распознанный текст в блоке</td>
+            </tr>
+            <tr>
+                <td><code>confidence</code></td>
+                <td>float64</td>
+                <td>Уверенность распознавания данного блока (0.0 - 1.0)</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Коды ошибок</h2>
+        <table class="param-table">
+            <tr>
+                <th>Код</th>
+                <th>Описание</th>
+            </tr>
+            <tr>
+                <td><span class="error-code">405</span></td>
+                <td>Неверный HTTP-метод (только POST)</td>
+            </tr>
+            <tr>
+                <td><span class="error-code">400</span></td>
+                <td>Неверный Content-Type, пустое изображение или ошибка чтения данных</td>
+            </tr>
+            <tr>
+                <td><span class="error-code">500</span></td>
+                <td>Ошибка обработки изображения или Tesseract OCR</td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>Алгоритм обработки</h2>
+        
+        <h3>Предобработка изображения</h3>
+        <p>Перед распознаванием изображение проходит несколько этапов предобработки:</p>
+        <ol>
+            <li><strong>Динамическое масштабирование</strong> - размер изображения корректируется в зависимости от количества пикселей:
+                <ul>
+                    <li>&lt; 0.5 MP: увеличение в 4 раза</li>
+                    <li>0.5-1 MP: увеличение в 3 раза</li>
+                    <li>1-2 MP: увеличение в 1.5 раза</li>
+                    <li>2-3 MP: без изменений</li>
+                    <li>&gt; 3 MP: уменьшение до 3 MP</li>
+                </ul>
+            </li>
+            <li><strong>Конвертация в градации серого</strong> - упрощает анализ и улучшает распознавание</li>
+            <li><strong>Медианный фильтр</strong> - уменьшает шум на изображении</li>
+        </ol>
+
+        <h3>Двухфазное распознавание</h3>
+        <p>Для улучшения качества распознавания используется двухфазный подход:</p>
+        <ol>
+            <li><strong>Фаза 1:</strong> OCR без поворота. Если взвешенная уверенность &ge; <code>confidence_threshold</code> (по умолчанию 0.66), результат возвращается сразу.</li>
+            <li><strong>Фаза 2:</strong> Параллельное тестирование 17 углов поворота (90°, 180°, 270° и отклонения ±5°, ±10° от основных ориентаций). Используется пул из 4 воркеров с ранним выходом при достижении порога уверенности.</li>
+        </ol>
+
+        <div class="note">
+            <strong>Примечание:</strong> Поддерживаются языки: английский (eng) и русский (rus).
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Подсчет токенов</h2>
+        <p>Токены учитываются по следующим правилам:</p>
+        <ul>
+            <li>Латинские и кириллические буквы</li>
+            <li>Цифры</li>
+            <li>Точка/запятая между цифрами (например, "3.14", "1,000")</li>
+            <li>Плюс/минус перед числом (например, "+5", "-10")</li>
+            <li>Символы процента, промилле, градуса, минут и секунд после числа (например, "45°", "30′", "15″", "5‰")</li>
+            <li>Символы валют рядом с числом (например, "$100", "50€")</li>
+        </ul>
+    </div>
+
+    <h2>Диаграмма обработки запроса</h2>
+    <div class="diagram-container">
+        <pre class="mermaid">
+flowchart TD
+    A[HTTP POST /classify] --> B{Метод POST?}
+    B -->|Нет| C[405 Method Not Allowed]
+    B -->|Да| D{Content-Type<br/>image/jpeg или image/png?}
+    D -->|Нет| E[400 Bad Request]
+    D -->|Да| F[Чтение тела запроса]
+    F --> G{Данные не пустые?}
+    G -->|Нет| H[400 Empty Image]
+    G -->|Да| I[Декодирование изображения]
+    I --> J{Размер > 32px?}
+    J -->|Нет| K[Пустой результат]
+    J -->|Да| L[Предобработка]
+    
+    subgraph preprocess [Предобработка изображения]
+        L --> L1[Динамическое масштабирование]
+        L1 --> L2[Конвертация в градации серого]
+        L2 --> L3[Медианный фильтр]
+    end
+    
+    L3 --> M[Фаза 1: OCR без поворота]
+    M --> N{Confidence >= threshold?}
+    N -->|Да| O[200 OK: Результат]
+    N -->|Нет| P[Фаза 2: Поворот изображения]
+    
+    subgraph phase2 [Фаза 2: Параллельная обработка]
+        P --> P1[Пул из 4 воркеров]
+        P1 --> P2[17 углов поворота:<br/>90°, 180°, 270°<br/>и отклонения ±5°, ±10°]
+        P2 --> P3[OCR для каждого угла]
+        P3 --> P4{Confidence >= threshold?}
+        P4 -->|Да| P5[Ранний выход]
+        P4 -->|Нет| P6[Продолжить обработку]
+    end
+    
+    P5 --> Q[200 OK: Лучший результат]
+    P6 --> R[Выбор лучшего результата]
+    R --> Q
+    K --> Q
+
+    style A fill:#3498db,color:#fff
+    style C fill:#e74c3c,color:#fff
+    style E fill:#e74c3c,color:#fff
+    style H fill:#e74c3c,color:#fff
+    style O fill:#27ae60,color:#fff
+    style Q fill:#27ae60,color:#fff
+    style preprocess fill:#f0f0f0
+    style phase2 fill:#f0f0f0
+        </pre>
+    </div>
+
+    <div class="section">
+        <h2>Примеры использования</h2>
+        <h3>Базовый запрос</h3>
+        <pre><code>curl -X POST \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @image.jpg \
+  http://localhost:8080/classify</code></pre>
+
+        <h3>С пользовательским порогом уверенности</h3>
+        <pre><code>curl -X POST \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @image.jpg \
+  "http://localhost:8080/classify?confidence_threshold=0.8"</code></pre>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            }
+        });
+    </script>
+</body>
+</html>
