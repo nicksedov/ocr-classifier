@@ -147,7 +147,7 @@ func processImage(classifier *Classifier, j imageJob) datasetResult {
 
 	width, height := getImageDimensions(imageData)
 
-	res, err := classifier.DetectText(imageData)
+	res, err := classifier.DetectText(imageData, DefaultConfidenceThreshold)
 	if err != nil {
 		return datasetResult{file: j.relPath, err: err}
 	}

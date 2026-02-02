@@ -76,7 +76,7 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 	// RIL_TEXTLINE - Text lines
 	// RIL_PARA - Paragraphs
 	// RIL_BLOCK - Text blocks (largest regions)
-	boxes, err := client.GetBoundingBoxes(gosseract.RIL_PARA)
+	boxes, err := client.GetBoundingBoxes(gosseract.RIL_WORD)
 	if err != nil {
 		return nil, err
 	}

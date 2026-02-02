@@ -43,7 +43,7 @@ func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
 	width, height := getImageDimensions(imageData)
 
 	classifier := NewClassifier()
-	result, err := classifier.DetectText(imageData)
+	result, err := classifier.DetectText(imageData, DefaultConfidenceThreshold)
 	if err != nil {
 		t.Fatalf("Failed to detect text: %v", err)
 	}
