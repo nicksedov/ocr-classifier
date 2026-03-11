@@ -25,6 +25,7 @@ type ClassifierResult struct {
 	Boxes              []BoundingBox `json:"boxes"`
 	Angle              int           `json:"angle"`
 	ScaleFactor        float64       `json:"scale_factor"`
+	IsTextDocument     bool          `json:"is_text_document"`
 }
 
 type rotationResult struct {
@@ -39,10 +40,7 @@ func NewClassifier() *Classifier {
 	return &Classifier{}
 }
 
-const (
-	DefaultConfidenceThreshold = 0.66 // Default confidence threshold, can be overridden via API parameter
-	numWorkers                 = 4
-)
+const numWorkers = 4
 
 // Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
 // Note: 0 is tested in Phase 1, so excluded here
@@ -148,10 +146,13 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 	}, nil
 }
 
-func (c *Classifier) DetectText(imageData []byte, confidenceThreshold float64) (*ClassifierResult, error) {
-	// Use default threshold if not specified or invalid
-	if confidenceThreshold <= 0 || confidenceThreshold > 1 {
-		confidenceThreshold = DefaultConfidenceThreshold
+func (c *Classifier) DetectText(imageData []byte, rule DecisionRule) (*ClassifierResult, error) {
+	// Use default values if not specified or invalid
+	if rule.MinConfidence <= 0 || rule.MinConfidence > 1 {
+		rule.MinConfidence = GetDefaultDecisionRule().MinConfidence
+	}
+	if rule.MinTokenCount <= 0 {
+		rule.MinTokenCount = GetDefaultDecisionRule().MinTokenCount
 	}
 
 	// Decode the original image
@@ -164,6 +165,7 @@ func (c *Classifier) DetectText(imageData []byte, confidenceThreshold float64) (
 		}
 		result.Angle = 0
 		result.ScaleFactor = 0
+		result.IsTextDocument = EvaluateDecision(result.WeightedConfidence, result.TokenCount, rule)
 		return result, nil
 	}
 
@@ -172,7 +174,9 @@ func (c *Classifier) DetectText(imageData []byte, confidenceThreshold float64) (
 
 	// If image is too small, return empty result
 	if preprocessed == nil {
-		return &ClassifierResult{}, nil
+		result := &ClassifierResult{}
+		result.IsTextDocument = false
+		return result, nil
 	}
 
 	// Encode preprocessed image for OCR
@@ -189,16 +193,18 @@ func (c *Classifier) DetectText(imageData []byte, confidenceThreshold float64) (
 
 	result.Angle = 0
 	result.ScaleFactor = scaleFactor
-	if result.WeightedConfidence >= confidenceThreshold {
+
+	result.IsTextDocument = EvaluateDecision(result.WeightedConfidence, result.TokenCount, rule)
+	if result.IsTextDocument {
 		return result, nil
 	}
 
 	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
 	// Rotations are applied to the preprocessed image
-	return c.detectTextWithRotations(preprocessed, scaleFactor, result, confidenceThreshold)
+	return c.detectTextWithRotations(preprocessed, scaleFactor, result, rule)
 }
 
-func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, confidenceThreshold float64) (*ClassifierResult, error) {
+func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, rule DecisionRule) (*ClassifierResult, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -212,7 +218,7 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, scaleFactor, confidenceThreshold)
+			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, rule)
 		}()
 	}
 
@@ -243,20 +249,25 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 		}
 		if rr.result.WeightedConfidence > bestResult.WeightedConfidence {
 			bestResult = rr.result
+			bestResult.IsTextDocument = EvaluateDecision(bestResult.WeightedConfidence, bestResult.TokenCount, rule)
 		}
-		// Early exit if threshold reached
-		if rr.result.WeightedConfidence >= confidenceThreshold {
+		// Early exit if decision rule criteria are met (both confidence and token count)
+		if EvaluateDecision(rr.result.WeightedConfidence, rr.result.TokenCount, rule) {
 			// Drain remaining results
 			for range resultsChan {
 			}
+			rr.result.ScaleFactor = scaleFactor
+			rr.result.IsTextDocument = true
 			return rr.result, nil
 		}
 	}
 
+	// Final verdict evaluation for the best result
+	bestResult.IsTextDocument = EvaluateDecision(bestResult.WeightedConfidence, bestResult.TokenCount, rule)
 	return bestResult, nil
 }
 
-func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, scaleFactor float64, confidenceThreshold float64) {
+func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, decisionRule DecisionRule) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -280,11 +291,10 @@ func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, 
 			}
 
 			res.Angle = angle
-			res.ScaleFactor = scaleFactor
 			resultsChan <- rotationResult{angle: angle, result: res}
 
-			// If confidence threshold reached, signal to stop
-			if res.WeightedConfidence >= confidenceThreshold {
+			// Early exit if decision rule criteria are met (both confidence and token count)
+			if EvaluateDecision(res.WeightedConfidence, res.TokenCount, decisionRule) {
 				return
 			}
 		}

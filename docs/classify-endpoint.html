@@ -113,13 +113,13 @@
             Эндпоинт <code>/classify</code> предназначен для классификации изображений на наличие текста 
             с использованием Tesseract OCR. Сервис анализирует изображение и возвращает детальную информацию 
             о найденном тексте, включая показатели уверенности (confidence), координаты текстовых блоков 
-            и количество найденных токенов.
+            и количество найденных токенов (текстовых символов, несущих смысловую нагрузку).
         </p>
     </div>
 
     <div class="section">
         <h2>HTTP-запрос</h2>
-        <pre><code>POST /classify[?confidence_threshold=0.66]
+        <pre><code>POST /classify[?confidence_threshold=0.66&min_token_count=20]
 Content-Type: image/jpeg | image/png
 Body: &lt;бинарные данные изображения&gt;</code></pre>
 
@@ -135,7 +135,13 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
                 <td><code>confidence_threshold</code></td>
                 <td>float64</td>
                 <td>0.66</td>
-                <td>Пороговое значение уверенности (0.0 - 1.0). При достижении этого порога дальнейшие попытки OCR с поворотом изображения прекращаются.</td>
+                <td>Минимальная взвешенная уверенность (0.0 - 1.0) для вердикта "текстовый документ". При достижении порога вместе с min_token_count дальнейшие попытки OCR прекращаются.</td>
+            </tr>
+            <tr>
+                <td><code>min_token_count</code></td>
+                <td>int</td>
+                <td>20</td>
+                <td>Минимальное количество токенов для вердикта "текстовый документ". При достижении порога вместе с confidence_threshold дальнейшие попытки OCR прекращаются.</td>
             </tr>
         </table>
 
@@ -153,7 +159,7 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
         <pre><code>{
   "mean_confidence": 0.85,
   "weighted_confidence": 0.88,
-  "token_count": 12,
+  "token_count": 25,
   "boxes": [
     {
       "x": 10,
@@ -165,7 +171,8 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
     }
   ],
   "angle": 0,
-  "scale_factor": 1.0
+  "scale_factor": 1.0,
+  "is_text_document": true
 }</code></pre>
 
         <h3>Параметры ответа</h3>
@@ -183,12 +190,12 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
             <tr>
                 <td><code>weighted_confidence</code></td>
                 <td>float64</td>
-                <td>Взвешенная уверенность с учетом количества токенов в каждом блоке (0.0 - 1.0)</td>
+                <td>Взвешенная уверенность с учетом количества токенов в каждом блоке (0.0 - 1.0). Более точный критерий для определения "текстового документа", чем mean_confidence.</td>
             </tr>
             <tr>
                 <td><code>token_count</code></td>
                 <td>int</td>
-                <td>Общее количество распознанных токенов (буквы, цифры, спецсимволы)</td>
+                <td>Общее количество распознанных токенов (буквы, цифры и спецсимволы, несущие смысловую нагрузку)</td>
             </tr>
             <tr>
                 <td><code>boxes</code></td>
@@ -204,6 +211,11 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
                 <td><code>scale_factor</code></td>
                 <td>float64</td>
                 <td>Коэффициент масштабирования, примененный к изображению</td>
+            </tr>
+            <tr>
+                <td><code>is_text_document</code></td>
+                <td>boolean</td>
+                <td>Вердикт: является ли документ текстовым (true если weighted_confidence >= confidence_threshold И token_count >= min_token_count)</td>
             </tr>
         </table>
 
@@ -291,9 +303,17 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
         <h3>Двухфазное распознавание</h3>
         <p>Для улучшения качества распознавания используется двухфазный подход:</p>
         <ol>
-            <li><strong>Фаза 1:</strong> OCR без поворота. Если взвешенная уверенность &ge; <code>confidence_threshold</code> (по умолчанию 0.66), результат возвращается сразу.</li>
-            <li><strong>Фаза 2:</strong> Параллельное тестирование 19 углов поворота (90°, 180°, 270° и отклонения ±5°, ±10° от основных ориентаций). Используется пул из 4 воркеров с ранним выходом при достижении порога уверенности.</li>
+            <li><strong>Фаза 1:</strong> OCR без поворота. Если оба критерия вердикта выполнены (взвешенная уверенность &ge; <code>confidence_threshold</code> И количество токенов &ge; <code>min_token_count</code>), результат возвращается сразу.</li>
+            <li><strong>Фаза 2:</strong> Параллельное тестирование 19 углов поворота (90°, 180°, 270° и отклонения ±5°, ±10° от основных ориентаций). Используется пул из 4 воркеров с ранним выходом при достижении критериев вердикта.</li>
         </ol>
+
+        <h3>Вердикт "Текстовый документ"</h3>
+        <p>Сервис определяет, является ли изображение текстовым документом, на основе двух критериев:</p>
+        <ul>
+            <li><strong>Взвешенная уверенность</strong> &ge; <code>confidence_threshold</code> (по умолчанию 0.66)</li>
+            <li><strong>Количество токенов</strong> &ge; <code>min_token_count</code> (по умолчанию 20)</li>
+        </ul>
+        <p>Оба условия должны быть выполнены одновременно. Результат возвращается в поле <code>is_text_document</code>.</p>
 
         <div class="note">
             <strong>Примечание:</strong> Поддерживаются языки: английский (eng) и русский (rus).
@@ -336,7 +356,7 @@ flowchart TD
     end
     
     L3 --> M[Фаза 1: OCR без поворота]
-    M --> N{Confidence >= threshold?}
+    M --> N{Вердикт:<br/>Confidence >= threshold<br/>И<br/>Token count >= min?}
     N -->|Да| O[200 OK: Результат]
     N -->|Нет| P[Фаза 2: Поворот изображения]
     
@@ -344,7 +364,7 @@ flowchart TD
         P --> P1[Пул из 4 воркеров]
         P1 --> P2[19 углов поворота:<br/>90°, 180°, 270°<br/>и отклонения ±5°, ±10°]
         P2 --> P3[OCR для каждого угла]
-        P3 --> P4{Confidence >= threshold?}
+        P3 --> P4{Вердикт:<br/>Confidence >= threshold<br/>И<br/>Token count >= min?}
         P4 -->|Да| P5[Ранний выход]
         P4 -->|Нет| P6[Продолжить обработку]
     end
@@ -378,6 +398,12 @@ flowchart TD
   -H "Content-Type: image/jpeg" \
   --data-binary @image.jpg \
   "http://localhost:8080/classify?confidence_threshold=0.8"</code></pre>
+
+        <h3>С пользовательскими критериями вердикта</h3>
+        <pre><code>curl -X POST \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @image.jpg \
+  "http://localhost:8080/classify?confidence_threshold=0.7&min_token_count=15"</code></pre>
     </div>
 
     <script>

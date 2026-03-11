@@ -55,16 +55,25 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse confidence_threshold from URL parameter (default: 0.66)
-	confidenceThreshold := service.DefaultConfidenceThreshold
+	// Parse query parameters with defaults
+	decisionRule := service.GetDefaultDecisionRule()
+
+	// Parse confidence_threshold from URL parameter
 	if thresholdStr := r.URL.Query().Get("confidence_threshold"); thresholdStr != "" {
 		if val, err := strconv.ParseFloat(thresholdStr, 64); err == nil && val > 0 && val <= 1 {
-			confidenceThreshold = val
+			decisionRule.MinConfidence = val
+		}
+	}
+
+	// Parse min_token_count from URL parameter
+	if tokenCountStr := r.URL.Query().Get("min_token_count"); tokenCountStr != "" {
+		if val, err := strconv.Atoi(tokenCountStr); err == nil && val > 0 {
+			decisionRule.MinTokenCount = val
 		}
 	}
 
 	// Perform classification
-	result, err := h.classifier.DetectText(imageData, confidenceThreshold)
+	result, err := h.classifier.DetectText(imageData, decisionRule)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to process image"})
