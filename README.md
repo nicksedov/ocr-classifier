@@ -118,6 +118,6 @@ curl -X POST \
 ```bash
 curl -X POST \
   -H "Content-Type: image/jpeg" \
-  --data-binary @test/dataset/text-deutch.jpg \
+  --data-binary @test/dataset/eng/lightbulb-scheme.jpg \
   http://localhost:8080/classify
 ```
