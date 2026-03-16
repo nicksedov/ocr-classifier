@@ -42,19 +42,6 @@ func NewClassifier() *Classifier {
 
 const numWorkers = 4
 
-// Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
-// Note: 0 is tested in Phase 1, so excluded here
-var phase2Angles = []int{
-	// Deviations from 0 (350, 355, 5, 10)
-	350, 355, 5, 10,
-	// 90 and deviations
-	80, 85, 90, 95, 100,
-	// 180 and deviations
-	170, 175, 180, 185, 190,
-	// 270 and deviations
-	260, 265, 270, 275, 280,
-}
-
 // detectTextSingle performs OCR on a single image using English and Russian
 func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
@@ -199,22 +186,36 @@ func (c *Classifier) DetectText(imageData []byte, rule DecisionRule) (*Classifie
 		return result, nil
 	}
 
-	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
-	// Rotations are applied to the preprocessed image
+	// Phase 2: Detect rotation angle using Canny edge detection and Hough Line Transform,
+	// then try OCR at candidate orientations derived from the detected angle.
 	return c.detectTextWithRotations(preprocessed, scaleFactor, result, rule)
 }
 
 func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, rule DecisionRule) (*ClassifierResult, error) {
+	// Detect candidate rotation angles using Canny edge detection and Hough Line Transform
+	candidateAngles := detectSkewAngle(preprocessed)
+
+	if len(candidateAngles) == 0 {
+		phase1Result.IsTextDocument = EvaluateDecision(phase1Result.WeightedConfidence, phase1Result.TokenCount, rule)
+		return phase1Result, nil
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	anglesChan := make(chan int, len(phase2Angles))
-	resultsChan := make(chan rotationResult, len(phase2Angles))
+	anglesChan := make(chan int, len(candidateAngles))
+	resultsChan := make(chan rotationResult, len(candidateAngles))
+
+	// Limit workers to the number of candidate angles
+	workers := numWorkers
+	if len(candidateAngles) < workers {
+		workers = len(candidateAngles)
+	}
 
 	var wg sync.WaitGroup
 
 	// Start workers
-	for i := 0; i < numWorkers; i++ {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -225,7 +226,7 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 	// Send angles to workers
 	go func() {
 		defer close(anglesChan)
-		for _, angle := range phase2Angles {
+		for _, angle := range candidateAngles {
 			select {
 			case <-ctx.Done():
 				return
