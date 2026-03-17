@@ -83,14 +83,11 @@ func preprocessImage(img image.Image) (*image.Gray, float64) {
 	// Step 1: Scale image using cubic interpolation (CatmullRom)
 	scaled := imaging.Resize(img, newW, newH, imaging.CatmullRom)
 
-	// Step 2: Convert to grayscale
-	gray := imaging.Grayscale(scaled)
+	// Step 2: Apply median blur to reduce noise
+	blurred := effect.Median(scaled, medianRadius)
 
-	// Step 3: Apply median blur to reduce noise
-	blurred := effect.Median(gray, medianRadius)
-
-	// Convert to *image.Gray
-	grayImg := convertToGray(blurred)
+	// Step 3: Convert to grayscale, light gray (224..255) treated as pure white
+	grayImg := convertToGray(blurred, 224)
 
 	return grayImg, scaleFactor
 }
@@ -124,12 +121,19 @@ func calculateScaleDimensions(w, h, pixels int) (newW, newH int, scaleFactor flo
 }
 
 // convertToGray converts any image to *image.Gray
-func convertToGray(img image.Image) *image.Gray {
+// Light gray shades (above threshold) are preserved as white pixels
+func convertToGray(img image.Image, threshold uint8) *image.Gray {
 	bounds := img.Bounds()
 	grayImg := image.NewGray(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			grayImg.Set(x-bounds.Min.X, y-bounds.Min.Y, img.At(x, y))
+			r, g, b, _ := img.At(x, y).RGBA()
+			// RGB to luminance formula
+            lum := uint8((19595*r + 38470*g + 7471*b + 1<<15) >> 24)
+			if lum >= threshold {
+				lum = uint8(0xff)
+			}
+			grayImg.SetGray(x-bounds.Min.X, y-bounds.Min.Y, color.Gray{Y: lum})
 		}
 	}
 	return grayImg
