@@ -43,7 +43,7 @@ func rotateImage(img image.Image, angleDeg int) image.Image {
 	}
 
 	// General rotation for arbitrary angles with white background
-	return imaging.Rotate(img, float64(-angleDeg), color.White)
+	return imaging.Rotate(img, float64(angleDeg), color.White)
 }
 
 // encodeImage encodes an image to bytes in the specified format

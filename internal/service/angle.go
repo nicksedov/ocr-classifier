@@ -19,7 +19,7 @@ func detectSkewAngle(gray *image.Gray) []int {
 	if bounds.Dy() < minDim {
 		minDim = bounds.Dy()
 	}
-	threshold := minDim / 4
+	threshold := minDim / 16
 	if threshold < 50 {
 		threshold = 50
 	}
@@ -35,13 +35,12 @@ func detectSkewAngle(gray *image.Gray) []int {
 }
 
 // cannyEdgeDetection performs Canny edge detection on a grayscale image.
-func cannyEdgeDetection(gray *image.Gray, lowThreshold, highThreshold float64) *image.Gray {
-	bounds := gray.Bounds()
+// Warning: it is required to apply smoothing (Gaussian/median blur) before passing the image to the method   
+func cannyEdgeDetection(smoothedGray *image.Gray, lowThreshold, highThreshold float64) *image.Gray {
+	bounds := smoothedGray.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 
-	blurred := gaussianBlur3x3(gray)
-	gx, gy := sobelGradients(blurred)
-
+	gx, gy := sobelGradients(smoothedGray)
 	// Gradient magnitude and direction
 	magnitude := make([][]float64, h)
 	direction := make([][]float64, h)
@@ -67,36 +66,6 @@ func cannyEdgeDetection(gray *image.Gray, lowThreshold, highThreshold float64) *
 
 	suppressed := nonMaxSuppression(magnitude, direction, w, h)
 	return hysteresisThresholding(suppressed, w, h, lowThreshold, highThreshold)
-}
-
-// gaussianBlur3x3 applies a 3x3 Gaussian blur.
-func gaussianBlur3x3(gray *image.Gray) *image.Gray {
-	bounds := gray.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	result := image.NewGray(image.Rect(0, 0, w, h))
-
-	// Copy boundary pixels that the kernel cannot reach
-	copy(result.Pix, gray.Pix)
-
-	kernel := [3][3]float64{
-		{1.0 / 16, 2.0 / 16, 1.0 / 16},
-		{2.0 / 16, 4.0 / 16, 2.0 / 16},
-		{1.0 / 16, 2.0 / 16, 1.0 / 16},
-	}
-
-	for y := 1; y < h-1; y++ {
-		for x := 1; x < w-1; x++ {
-			var sum float64
-			for ky := -1; ky <= 1; ky++ {
-				for kx := -1; kx <= 1; kx++ {
-					sum += float64(gray.GrayAt(x+kx, y+ky).Y) * kernel[ky+1][kx+1]
-				}
-			}
-			result.SetGray(x, y, color.Gray{Y: uint8(math.Round(sum))})
-		}
-	}
-
-	return result
 }
 
 // sobelGradients computes Sobel gradients in X and Y directions.

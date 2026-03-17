@@ -24,7 +24,12 @@ func TestBoundingBoxesInscription(t *testing.T) {
 }
 
 func TestBoundingBoxesRus(t *testing.T) {
-	runBoundingBoxesTest(t, "rus", "passportscan02.png")
+	runBoundingBoxesTest(t, "rus", "passportscan02.jpg")
+}
+
+func TestBoundingBoxesRusRotated(t *testing.T) {
+	runBoundingBoxesTest(t, "rus", "rotated_15cw.jpg")
+	runBoundingBoxesTest(t, "rus", "rotated_15ccw.jpg")
 }
 
 func runBoundingBoxesTest(t *testing.T, subfolder, filename string) {
