@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const defaultWorkers = 6
+const defaultWorkers = 16
 
 type datasetResult struct {
 	file         string

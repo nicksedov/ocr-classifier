@@ -2,9 +2,7 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"image"
-	"sync"
 
 	"github.com/otiai10/gosseract/v2"
 )
@@ -28,31 +26,10 @@ type ClassifierResult struct {
 	IsTextDocument     bool          `json:"is_text_document"`
 }
 
-type rotationResult struct {
-	angle  int
-	result *ClassifierResult
-	err    error
-}
-
 type Classifier struct{}
 
 func NewClassifier() *Classifier {
 	return &Classifier{}
-}
-
-const numWorkers = 4
-
-// Phase 2 rotation angles: 90, 180, 270 and deviations of 5, 10 degrees from 0, 90, 180, 270
-// Note: 0 is tested in Phase 1, so excluded here
-var phase2Angles = []int{
-	// Deviations from 0 (350, 355, 5, 10)
-	350, 355, 5, 10,
-	// 90 and deviations
-	80, 85, 90, 95, 100,
-	// 180 and deviations
-	170, 175, 180, 185, 190,
-	// 270 and deviations
-	260, 265, 270, 275, 280,
 }
 
 // detectTextSingle performs OCR on a single image using English and Russian
@@ -80,7 +57,7 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 	}
 
 	if len(boxes) == 0 {
-		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{IsTextDocument : false}, nil
 	}
 
 	var totalConfidence float64
@@ -116,7 +93,7 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 
 	// Handle case where no valid boxes found after filtering
 	if len(resultBoxes) == 0 {
-		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{IsTextDocument : false}, nil
 	}
 
 	// Calculate mean confidence
@@ -199,104 +176,52 @@ func (c *Classifier) DetectText(imageData []byte, rule DecisionRule) (*Classifie
 		return result, nil
 	}
 
-	// Phase 2: Try rotations at 90, 180, 270 and deviations (5, 10 degrees) from each main orientation
-	// Rotations are applied to the preprocessed image
+	// Phase 2: Detect rotation angle using Canny edge detection and Hough Line Transform,
+	// then try OCR at candidate orientations derived from the detected angle.
 	return c.detectTextWithRotations(preprocessed, scaleFactor, result, rule)
 }
 
 func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, rule DecisionRule) (*ClassifierResult, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Detect candidate rotation angles using Canny edge detection and Hough Line Transform
+	candidateAngles := detectSkewAngle(preprocessed)
 
-	anglesChan := make(chan int, len(phase2Angles))
-	resultsChan := make(chan rotationResult, len(phase2Angles))
-
-	var wg sync.WaitGroup
-
-	// Start workers
-	for i := 0; i < numWorkers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			c.rotationWorker(ctx, anglesChan, resultsChan, preprocessed, rule)
-		}()
+	if len(candidateAngles) == 0 {
+		phase1Result.IsTextDocument = EvaluateDecision(phase1Result.WeightedConfidence, phase1Result.TokenCount, rule)
+		return phase1Result, nil
 	}
 
-	// Send angles to workers
-	go func() {
-		defer close(anglesChan)
-		for _, angle := range phase2Angles {
-			select {
-			case <-ctx.Done():
-				return
-			case anglesChan <- angle:
-			}
-		}
-	}()
-
-	// Wait for workers in a separate goroutine
-	go func() {
-		wg.Wait()
-		close(resultsChan)
-	}()
-
-	// Collect results and find the best one
 	bestResult := phase1Result
 
-	for rr := range resultsChan {
-		if rr.err != nil {
+	for _, angle := range candidateAngles {
+		if angle == 0 {
+			continue // Skip zero angle, already processed in phase 1
+		}
+		rotated := rotateImage(preprocessed, angle)
+		data, err := encodeImage(rotated, "png")
+		if err != nil {
 			continue
 		}
-		if rr.result.WeightedConfidence > bestResult.WeightedConfidence {
-			bestResult = rr.result
-			bestResult.IsTextDocument = EvaluateDecision(bestResult.WeightedConfidence, bestResult.TokenCount, rule)
+
+		res, err := c.detectTextSingle(data)
+		if err != nil {
+			continue
 		}
-		// Early exit if decision rule criteria are met (both confidence and token count)
-		if EvaluateDecision(rr.result.WeightedConfidence, rr.result.TokenCount, rule) {
-			// Drain remaining results
-			for range resultsChan {
-			}
-			rr.result.ScaleFactor = scaleFactor
-			rr.result.IsTextDocument = true
-			return rr.result, nil
+
+		res.Angle = angle
+		res.ScaleFactor = scaleFactor
+
+		// Early exit if decision rule criteria are met
+		if EvaluateDecision(res.WeightedConfidence, res.TokenCount, rule) {
+			res.IsTextDocument = true
+			return res, nil
+		}
+        // Otherwise preserve the best result so far, then go on with the next candidate
+		if res.WeightedConfidence > bestResult.WeightedConfidence {
+			bestResult = res
 		}
 	}
 
 	// Final verdict evaluation for the best result
 	bestResult.IsTextDocument = EvaluateDecision(bestResult.WeightedConfidence, bestResult.TokenCount, rule)
 	return bestResult, nil
-}
-
-func (c *Classifier) rotationWorker(ctx context.Context, anglesChan <-chan int, resultsChan chan<- rotationResult, preprocessed *image.Gray, decisionRule DecisionRule) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case angle, ok := <-anglesChan:
-			if !ok {
-				return
-			}
-
-			rotated := rotateImage(preprocessed, angle)
-			data, encErr := encodeImage(rotated, "png")
-			if encErr != nil {
-				resultsChan <- rotationResult{angle: angle, err: encErr}
-				continue
-			}
-
-			res, detectErr := c.detectTextSingle(data)
-			if detectErr != nil {
-				resultsChan <- rotationResult{angle: angle, err: detectErr}
-				continue
-			}
-
-			res.Angle = angle
-			resultsChan <- rotationResult{angle: angle, result: res}
-
-			// Early exit if decision rule criteria are met (both confidence and token count)
-			if EvaluateDecision(res.WeightedConfidence, res.TokenCount, decisionRule) {
-				return
-			}
-		}
-	}
 }
