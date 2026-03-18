@@ -57,7 +57,7 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 	}
 
 	if len(boxes) == 0 {
-		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{IsTextDocument : false}, nil
 	}
 
 	var totalConfidence float64
@@ -93,7 +93,7 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 
 	// Handle case where no valid boxes found after filtering
 	if len(resultBoxes) == 0 {
-		return &ClassifierResult{MeanConfidence: 0, WeightedConfidence: 0, TokenCount: 0, Boxes: []BoundingBox{}, Angle: 0}, nil
+		return &ClassifierResult{IsTextDocument : false}, nil
 	}
 
 	// Calculate mean confidence
@@ -215,7 +215,7 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 			res.IsTextDocument = true
 			return res, nil
 		}
-
+        // Otherwise preserve the best result so far, then go on with the next candidate
 		if res.WeightedConfidence > bestResult.WeightedConfidence {
 			bestResult = res
 		}

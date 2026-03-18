@@ -125,15 +125,20 @@ func calculateScaleDimensions(w, h, pixels int) (newW, newH int, scaleFactor flo
 func convertToGray(img image.Image, threshold uint8) *image.Gray {
 	bounds := img.Bounds()
 	grayImg := image.NewGray(image.Rect(0, 0, bounds.Dx(), bounds.Dy()))
+	var grayPixel *color.Gray
+	whitePixel := &color.Gray{Y: 0xff}
+
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
 			r, g, b, _ := img.At(x, y).RGBA()
 			// RGB to luminance formula
             lum := uint8((19595*r + 38470*g + 7471*b + 1<<15) >> 24)
-			if lum >= threshold {
-				lum = uint8(0xff)
+			if lum < threshold {
+				grayPixel = &color.Gray{Y: lum}
+			} else {
+				grayPixel = whitePixel
 			}
-			grayImg.SetGray(x-bounds.Min.X, y-bounds.Min.Y, color.Gray{Y: lum})
+			grayImg.SetGray(x-bounds.Min.X, y-bounds.Min.Y, *grayPixel)
 		}
 	}
 	return grayImg
