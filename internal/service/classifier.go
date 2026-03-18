@@ -193,6 +193,9 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 	bestResult := phase1Result
 
 	for _, angle := range candidateAngles {
+		if angle == 0 {
+			continue // Skip zero angle, already processed in phase 1
+		}
 		rotated := rotateImage(preprocessed, angle)
 		data, err := encodeImage(rotated, "png")
 		if err != nil {
