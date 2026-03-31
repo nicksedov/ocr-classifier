@@ -26,6 +26,7 @@ type datasetResult struct {
 	weightedConf float64
 	tokenCount   int
 	angle        int
+	isTextDoc    bool
 	err          error
 }
 
@@ -161,6 +162,7 @@ func processImage(classifier *Classifier, j imageJob) datasetResult {
 		weightedConf: res.WeightedConfidence,
 		tokenCount:   res.TokenCount,
 		angle:        res.Angle,
+		isTextDoc:    res.IsTextDocument,
 	}
 }
 
@@ -195,8 +197,8 @@ func printDatasetHeader(subfolder string) {
 	fmt.Println(strings.Repeat("=", 120))
 	fmt.Printf("Dataset: %s\n", subfolder)
 	fmt.Println(strings.Repeat("-", 120))
-	fmt.Printf("%-30s | %-12s | %-6s | %-10s | %-10s | %-8s | %-6s\n",
-		"File", "Dimensions", "Scale", "MeanConf", "WeightConf", "Tokens", "Angle")
+	fmt.Printf("%-30s | %-12s | %-6s | %-10s | %-10s | %-8s | %-6s | %-6s\n",
+		"File", "Dimensions", "Scale", "MeanConf", "WeightConf", "Tokens", "Angle", "Verdict")
 	fmt.Println(strings.Repeat("-", 120))
 }
 
@@ -205,8 +207,8 @@ func printDatasetRow(r datasetResult) {
 		fmt.Printf("%-30s | ERROR: %v\n", r.file, r.err)
 	} else {
 		dims := fmt.Sprintf("%dx%d", r.width, r.height)
-		fmt.Printf("%-30s | %-12s | %-6.2f | %-10.4f | %-10.4f | %-8d | %-6d\n",
-			r.file, dims, r.scaleFactor, r.meanConf, r.weightedConf, r.tokenCount, r.angle)
+		fmt.Printf("%-30s | %-12s | %-6.2f | %-10.4f | %-10.4f | %-8d | %-6d | %-6v\n",
+			r.file, dims, r.scaleFactor, r.meanConf, r.weightedConf, r.tokenCount, r.angle, r.isTextDoc)
 	}
 }
 

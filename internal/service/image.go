@@ -17,7 +17,7 @@ const (
 
 	// minBoxConfidence is the minimum confidence threshold for OCR postprocessing.
 	// Boxes with confidence below this value are discarded.
-	minBoxConfidence = 0.15
+	minBoxConfidence = 0.25
 
 	// Image size thresholds for dynamic scaling
 	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
