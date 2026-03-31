@@ -35,7 +35,7 @@ func detectSkewAngle(gray *image.Gray) []int {
 }
 
 // cannyEdgeDetection performs Canny edge detection on a grayscale image.
-// Warning: it is required to apply smoothing (Gaussian/median blur) before passing the image to the method   
+// Warning: it is required to apply smoothing (Gaussian/median blur) before passing the image to the method.
 func cannyEdgeDetection(smoothedGray *image.Gray, lowThreshold, highThreshold float64) *image.Gray {
 	bounds := smoothedGray.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()

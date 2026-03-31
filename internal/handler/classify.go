@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -9,26 +10,34 @@ import (
 	"ocr-classifier/internal/service"
 )
 
+// ClassifyHandler handles image classification requests.
 type ClassifyHandler struct {
 	classifier *service.Classifier
 }
 
+// NewClassifyHandler creates a new ClassifyHandler instance.
 func NewClassifyHandler() *ClassifyHandler {
 	return &ClassifyHandler{
 		classifier: service.NewClassifier(),
 	}
 }
 
+// ErrorResponse represents an error response in JSON format.
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// Classify processes image classification requests.
+// It accepts POST requests with image/jpeg or image/png content type.
+// Optional query parameters: confidence_threshold (0-1), min_token_count (positive integer).
 func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed, use POST"})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "method not allowed, use POST"}); err != nil {
+			fmt.Fprintf(w, `{"error":"method not allowed, use POST"}`)
+		}
 		return
 	}
 
@@ -36,7 +45,9 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "image/jpeg" && contentType != "image/png" {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "content-type must be image/jpeg or image/png"})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "content-type must be image/jpeg or image/png"}); err != nil {
+			fmt.Fprintf(w, `{"error":"content-type must be image/jpeg or image/png"}`)
+		}
 		return
 	}
 
@@ -44,14 +55,18 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	imageData, err := io.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read image data"})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to read image data"}); err != nil {
+			fmt.Fprintf(w, `{"error":"failed to read image data"}`)
+		}
 		return
 	}
 	defer r.Body.Close()
 
 	if len(imageData) == 0 {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "empty image data"})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "empty image data"}); err != nil {
+			fmt.Fprintf(w, `{"error":"empty image data"}`)
+		}
 		return
 	}
 
@@ -76,10 +91,14 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	result, err := h.classifier.DetectText(imageData, decisionRule)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to process image"})
+		if err := json.NewEncoder(w).Encode(ErrorResponse{Error: "failed to process image"}); err != nil {
+			fmt.Fprintf(w, `{"error":"failed to process image"}`)
+		}
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		fmt.Fprintf(w, `{"error":"failed to encode response"}`)
+	}
 }
