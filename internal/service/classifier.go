@@ -8,6 +8,13 @@ import (
 	"github.com/otiai10/gosseract/v2"
 )
 
+
+const (
+	// minBoxConfidence is the minimum confidence threshold for OCR postprocessing.
+	// Boxes with confidence below this value are discarded.
+	minBoxConfidence = 0.25
+)
+
 // BoundingBox represents a detected text region with its position and confidence.
 type BoundingBox struct {
 	X          int     `json:"x"`

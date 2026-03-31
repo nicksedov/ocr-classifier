@@ -15,10 +15,6 @@ import (
 const (
 	medianRadius = 1.0 // Radius for median blur (kernel size 3 = radius 1)
 
-	// minBoxConfidence is the minimum confidence threshold for OCR postprocessing.
-	// Boxes with confidence below this value are discarded.
-	minBoxConfidence = 0.25
-
 	// Image size thresholds for dynamic scaling
 	minDimension    = 32                // Minimum dimension in pixels (skip if smaller)
 	halfMegapixel   = 524_288           // 0.5 MP
