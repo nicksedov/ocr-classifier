@@ -237,7 +237,7 @@
         </div>
         <div class="lifecycle-step">
             <div class="step-number">3</div>
-            <div>Для изображений (JPG/PNG) выполняется бинарная классификация через <code>ocr-classifier /classify</code> — определяется, содержит ли изображение текстовый документ</div>
+            <div>Для изображений (JPG/PNG) выполняется бинарная классификация через <code>ocr-classifier /ocr-classifier/api/v1/classify</code> — определяется, содержит ли изображение текстовый документ</div>
         </div>
         <div class="lifecycle-step">
             <div class="step-number">4</div>
@@ -266,7 +266,7 @@ flowchart TD
     end
 
     subgraph ocr [OCR Classifier]
-        O1[POST /classify]
+        O1[POST /ocr-classifier/api/v1/classify]
         O2{Содержит текст?}
     end
 
@@ -436,12 +436,12 @@ flowchart LR
                 <th style="padding: 12px; text-align: left;">Назначение</th>
             </tr>
             <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 12px;"><code>/classify</code></td>
+                <td style="padding: 12px;"><code>/ocr-classifier/api/v1/classify</code></td>
                 <td style="padding: 12px;">POST</td>
                 <td style="padding: 12px;">Бинарная классификация изображения на наличие текстового документа</td>
             </tr>
             <tr style="border-bottom: 1px solid #ddd;">
-                <td style="padding: 12px;"><code>/health</code></td>
+                <td style="padding: 12px;"><code>/ocr-classifier/api/health</code></td>
                 <td style="padding: 12px;">GET</td>
                 <td style="padding: 12px;">Проверка работоспособности сервиса</td>
             </tr>

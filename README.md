@@ -43,12 +43,14 @@ PORT=3000 ./ocr-classifier
 
 ## API
 
+Все эндпоинты находятся под корневым путём `/ocr-classifier/api`.
+
 ### Health Check
 
 Проверка работоспособности сервиса.
 
 ```
-GET /health
+GET /ocr-classifier/api/health
 ```
 
 **Ответ:**
@@ -56,12 +58,12 @@ GET /health
 {"status": "ok"}
 ```
 
-### Classify
+### Classify (v1)
 
 Классификация изображения на наличие текста. Поддерживаются форматы `image/jpeg` и `image/png`.
 
 ```
-POST /classify
+POST /ocr-classifier/api/v1/classify
 Content-Type: image/jpeg
 Body: <бинарные данные изображения>
 ```
@@ -102,7 +104,7 @@ Body: <бинарные данные изображения>
 ### Health Check
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8080/ocr-classifier/api/health
 ```
 
 ### Классификация изображения
@@ -111,7 +113,7 @@ curl http://localhost:8080/health
 curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @path/to/image.jpg \
-  http://localhost:8080/classify
+  http://localhost:8080/ocr-classifier/api/v1/classify
 ```
 
 **Пример c изображением из датасета:**
@@ -120,5 +122,5 @@ curl -X POST \
 curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @test/dataset/eng/lightbulb-scheme.jpg \
-  http://localhost:8080/classify
+  http://localhost:8080/ocr-classifier/api/v1/classify
 ```

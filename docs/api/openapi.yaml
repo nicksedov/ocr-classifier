@@ -1,0 +1,264 @@
+openapi: 3.0.3
+info:
+  title: OCR Classifier API
+  description: |
+    HTTP-сервис для определения наличия текста на изображениях с использованием Tesseract OCR.
+    Возвращает детальную информацию о найденном тексте, включая показатели уверенности (confidence),
+    координаты текстовых блоков и количество найденных токенов. Ответ содержит вердикт, является ли
+    данное изображение документом (true/false), который выносится на основе правил.
+  version: 1.0.0
+  contact:
+    name: OCR Classifier Support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Эндпоинты для проверки работоспособности сервиса
+  - name: Classify
+    description: Эндпоинты для классификации изображений
+
+paths:
+  /ocr-classifier/api/health:
+    get:
+      tags:
+        - Health
+      summary: Проверка работоспособности сервиса
+      description: |
+        Возвращает статус сервиса. Используется для проверки доступности API.
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Сервис работает корректно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: ok
+
+  /ocr-classifier/api/v1/classify:
+    post:
+      tags:
+        - Classify
+      summary: Классификация изображения на наличие текста
+      description: |
+        Анализирует изображение и возвращает детальную информацию о найденном тексте,
+        включая показатели уверенности (confidence), координаты текстовых блоков и количество
+        найденных токенов. Фрагменты текста с уверенностью распознавания ниже 0.25 отфильтровываются.
+        
+        Алгоритм обработки:
+        1. Предобработка изображения (масштабирование, конвертация в ЧБ, медианный фильтр)
+        2. Фаза 1: OCR без поворота
+        3. Фаза 2: Автоматическое определение угла наклона (deskewing) с параллельным OCR
+        
+        Вердикт "Текстовый документ" выносится при выполнении обоих условий:
+        - weighted_confidence >= confidence_threshold (по умолчанию 0.66)
+        - token_count >= min_token_count (по умолчанию 20)
+      operationId: classifyImage
+      parameters:
+        - name: confidence_threshold
+          in: query
+          description: |
+            Минимальная взвешенная уверенность (0.0 - 1.0) для вердикта "текстовый документ".
+            При достижении порога вместе с min_token_count дальнейшие попытки OCR прекращаются.
+          required: false
+          schema:
+            type: number
+            format: float
+            default: 0.66
+            minimum: 0
+            maximum: 1
+        - name: min_token_count
+          in: query
+          description: |
+            Минимальное количество токенов для вердикта "текстовый документ".
+            При достижении порога вместе с confidence_threshold дальнейшие попытки OCR прекращаются.
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 20
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+        description: Бинарные данные изображения в формате JPEG или PNG
+      responses:
+        '200':
+          description: Успешная классификация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClassifyResponse'
+              example:
+                mean_confidence: 0.85
+                weighted_confidence: 0.88
+                token_count: 25
+                boxes:
+                  - x: 10
+                    y: 20
+                    width: 100
+                    height: 50
+                    word: "Example"
+                    confidence: 0.95
+                angle: 0
+                scale_factor: 1.0
+                is_text_document: true
+        '400':
+          description: Неверный Content-Type, пустое изображение или ошибка чтения данных
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "content-type must be image/jpeg or image/png"
+        '405':
+          description: Неверный HTTP метод (только POST)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "method not allowed, use POST"
+        '500':
+          description: Ошибка обработки изображения или Tesseract OCR
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "failed to process image"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      description: Ответ сервиса о статусе работоспособности
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          description: Статус сервиса
+          example: ok
+
+    ClassifyResponse:
+      type: object
+      description: Результат классификации изображения
+      required:
+        - mean_confidence
+        - weighted_confidence
+        - token_count
+        - boxes
+        - angle
+        - scale_factor
+        - is_text_document
+      properties:
+        mean_confidence:
+          type: number
+          format: float
+          description: Средняя уверенность распознавания по всем текстовым блокам (0.0 - 1.0)
+          example: 0.85
+        weighted_confidence:
+          type: number
+          format: float
+          description: |
+            Взвешенная уверенность с учетом количества токенов в каждом блоке (0.0 - 1.0).
+            Более точный критерий для определения "текстового документа", чем mean_confidence.
+          example: 0.88
+        token_count:
+          type: integer
+          format: int32
+          description: |
+            Общее количество распознанных токенов (буквы, цифры и спецсимволы, несущие смысловую нагрузку).
+            Токены во фрагментах с confidence ниже 0.25 не учитываются.
+          example: 25
+        boxes:
+          type: array
+          description: Массив текстовых блоков с координатами и содержимым
+          items:
+            $ref: '#/components/schemas/BoundingBox'
+        angle:
+          type: integer
+          format: int32
+          description: Угол поворота изображения, определенный алгоритмом deskewing (0-359 градусов)
+          example: 0
+        scale_factor:
+          type: number
+          format: float
+          description: Коэффициент масштабирования, примененный к изображению
+          example: 1.0
+        is_text_document:
+          type: boolean
+          description: |
+            Вердикт: является ли документ текстовым (true если weighted_confidence >= confidence_threshold
+            И token_count >= min_token_count)
+          example: true
+
+    BoundingBox:
+      type: object
+      description: Координаты текстового блока на изображении
+      required:
+        - x
+        - y
+        - width
+        - height
+        - word
+        - confidence
+      properties:
+        x:
+          type: integer
+          format: int32
+          description: X-координата левого верхнего угла блока
+          example: 10
+        y:
+          type: integer
+          format: int32
+          description: Y-координата левого верхнего угла блока
+          example: 20
+        width:
+          type: integer
+          format: int32
+          description: Ширина текстового блока в пикселях
+          example: 100
+        height:
+          type: integer
+          format: int32
+          description: Высота текстового блока в пикселях
+          example: 50
+        word:
+          type: string
+          description: Распознанный текст в блоке
+          example: "Example"
+        confidence:
+          type: number
+          format: float
+          description: |
+            Уверенность распознавания данного блока (0.0 - 1.0).
+            Блоки с confidence ниже 0.25 отфильтровываются и не возвращаются.
+          example: 0.95
+
+    ErrorResponse:
+      type: object
+      description: Ответ об ошибке
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Описание ошибки
+          example: "failed to process image"

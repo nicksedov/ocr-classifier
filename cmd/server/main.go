@@ -25,8 +25,9 @@ func main() {
 	classifyHandler := handler.NewClassifyHandler()
 
 	// 4. Register handlers
-	mux.HandleFunc("/health", handler.HealthCheck)
-	mux.HandleFunc("/classify", classifyHandler.Classify)
+	// Root API prefix: /ocr-classifier/api
+	mux.HandleFunc("/ocr-classifier/api/health", handler.HealthCheck)
+	mux.HandleFunc("/ocr-classifier/api/v1/classify", classifyHandler.Classify)
 
 	// 5. Create HTTP server
 	addr := ":" + cfg.Port

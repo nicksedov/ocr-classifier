@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCR Classifier - Эндпоинт /classify</title>
+    <title>OCR Classifier - Эндпоинт /ocr-classifier/api/v1/classify</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         body {
@@ -105,12 +105,12 @@
     </style>
 </head>
 <body>
-    <h1>OCR Classifier - Эндпоинт /classify</h1>
+    <h1>OCR Classifier - Эндпоинт /ocr-classifier/api/v1/classify</h1>
 
     <div class="section">
         <h2>Описание</h2>
         <p>
-            Эндпоинт <code>/classify</code> предназначен для классификации изображений на наличие текста 
+            Эндпоинт <code>/ocr-classifier/api/v1/classify</code> предназначен для классификации изображений на наличие текста 
             с использованием Tesseract OCR. Сервис анализирует изображение и возвращает детальную информацию 
             о найденном тексте, включая показатели уверенности (confidence), координаты текстовых фрагментов 
             и количество найденных токенов (текстовых символов, несущих смысловую нагрузку).
@@ -120,7 +120,7 @@
 
     <div class="section">
         <h2>HTTP-запрос</h2>
-        <pre><code>POST /classify[?confidence_threshold=0.66&min_token_count=20]
+        <pre><code>POST /ocr-classifier/api/v1/classify[?confidence_threshold=0.66&min_token_count=20]
 Content-Type: image/jpeg | image/png
 Body: &lt;бинарные данные изображения&gt;</code></pre>
 
@@ -406,19 +406,19 @@ flowchart TD
         <pre><code>curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @image.jpg \
-  http://localhost:8080/classify</code></pre>
+  http://localhost:8080/ocr-classifier/api/v1/classify</code></pre>
 
         <h3>С пользовательским порогом уверенности</h3>
         <pre><code>curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @image.jpg \
-  "http://localhost:8080/classify?confidence_threshold=0.8"</code></pre>
+  "http://localhost:8080/ocr-classifier/api/v1/classify?confidence_threshold=0.8"</code></pre>
 
         <h3>С пользовательскими критериями вердикта</h3>
         <pre><code>curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @image.jpg \
-  "http://localhost:8080/classify?confidence_threshold=0.7&min_token_count=15"</code></pre>
+  "http://localhost:8080/ocr-classifier/api/v1/classify?confidence_threshold=0.7&min_token_count=15"</code></pre>
     </div>
 
     <script>
