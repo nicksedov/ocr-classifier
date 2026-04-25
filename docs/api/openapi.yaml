@@ -51,17 +51,43 @@ paths:
         Анализирует изображение и возвращает детальную информацию о найденном тексте,
         включая показатели уверенности (confidence), координаты текстовых блоков и количество
         найденных токенов. Фрагменты текста с уверенностью распознавания ниже 0.25 отфильтровываются.
-        
+
         Алгоритм обработки:
         1. Предобработка изображения (масштабирование, конвертация в ЧБ, медианный фильтр)
         2. Фаза 1: OCR без поворота
         3. Фаза 2: Автоматическое определение угла наклона (deskewing) с параллельным OCR
-        
+
         Вердикт "Текстовый документ" выносится при выполнении обоих условий:
         - weighted_confidence >= confidence_threshold (по умолчанию 0.66)
         - token_count >= min_token_count (по умолчанию 20)
       operationId: classifyImage
       parameters:
+        - name: lang
+          in: query
+          description: |
+            Языки для Tesseract OCR. Поддерживаются любые языки, установленные в системе.
+            Несколько языков разделяются плюсом (например, eng, rus, eng+rus, deu+fra).
+          required: false
+          schema:
+            type: string
+            default: "eng+rus"
+        - name: level
+          in: query
+          description: |
+            Уровень детализации структуры текста (PageIteratorLevel).
+            Допустимые значения: RIL_BLOCK (блок), RIL_PARA (абзац), RIL_TEXTLINE (строка),
+            RIL_WORD (слово), RIL_SYMBOL (символ). Более детальные уровни могут значительно
+            увеличить время обработки.
+          required: false
+          schema:
+            type: string
+            enum:
+              - RIL_BLOCK
+              - RIL_PARA
+              - RIL_TEXTLINE
+              - RIL_WORD
+              - RIL_SYMBOL
+            default: RIL_WORD
         - name: confidence_threshold
           in: query
           description: |

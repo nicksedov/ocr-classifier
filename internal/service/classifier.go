@@ -8,12 +8,26 @@ import (
 	"github.com/otiai10/gosseract/v2"
 )
 
-
 const (
 	// minBoxConfidence is the minimum confidence threshold for OCR postprocessing.
 	// Boxes with confidence below this value are discarded.
 	minBoxConfidence = 0.25
+
+	// DefaultLanguage is the default language set for Tesseract OCR.
+	DefaultLanguage = "eng+rus"
+
+	// DefaultPageIteratorLevel is the default level of detail for text structure.
+	DefaultPageIteratorLevel = gosseract.RIL_WORD
 )
+
+// OCRParams holds OCR-specific parameters.
+type OCRParams struct {
+	// Language is the language(s) for Tesseract OCR (e.g., "eng", "rus", "eng+rus").
+	Language string
+	// Level is the PageIteratorLevel for text structure granularity.
+	// If nil, DefaultPageIteratorLevel will be used.
+	Level *gosseract.PageIteratorLevel
+}
 
 // BoundingBox represents a detected text region with its position and confidence.
 type BoundingBox struct {
@@ -44,13 +58,18 @@ func NewClassifier() *Classifier {
 	return &Classifier{}
 }
 
-// detectTextSingle performs OCR on a single image using English and Russian.
+// detectTextSingle performs OCR on a single image using specified language and level.
 // It returns the detected text boxes with confidence scores and token counts.
-func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, error) {
+func (c *Classifier) detectTextSingle(imageData []byte, params OCRParams) (*ClassifierResult, error) {
 	client := gosseract.NewClient()
 	defer client.Close()
 
-	if err := client.SetLanguage("eng+rus"); err != nil {
+	language := params.Language
+	if language == "" {
+		language = DefaultLanguage
+	}
+
+	if err := client.SetLanguage(language); err != nil {
 		return nil, fmt.Errorf("failed to set language: %w", err)
 	}
 
@@ -58,7 +77,13 @@ func (c *Classifier) detectTextSingle(imageData []byte) (*ClassifierResult, erro
 		return nil, fmt.Errorf("failed to set image: %w", err)
 	}
 
-	boxes, err := client.GetBoundingBoxes(gosseract.RIL_WORD)
+	level := params.Level
+	if level == nil {
+		defaultLevel := DefaultPageIteratorLevel
+		level = &defaultLevel
+	}
+
+	boxes, err := client.GetBoundingBoxes(*level)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get bounding boxes: %w", err)
 	}
@@ -177,6 +202,13 @@ func (c *Classifier) normalizeDecisionRule(rule DecisionRule) DecisionRule {
 	if rule.MinTokenCount <= 0 {
 		rule.MinTokenCount = GetDefaultDecisionRule().MinTokenCount
 	}
+	if rule.Language == "" {
+		rule.Language = DefaultLanguage
+	}
+	if rule.Level == nil {
+		level := DefaultPageIteratorLevel
+		rule.Level = &level
+	}
 	return rule
 }
 
@@ -189,7 +221,8 @@ func (c *Classifier) decodeImage(imageData []byte) (image.Image, error) {
 // detectWithoutPreprocessing performs OCR without image preprocessing.
 // Used when image decoding fails.
 func (c *Classifier) detectWithoutPreprocessing(imageData []byte, rule DecisionRule) (*ClassifierResult, error) {
-	result, err := c.detectTextSingle(imageData)
+	rule = c.normalizeDecisionRule(rule)
+	result, err := c.detectTextSingle(imageData, rule.OCRParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect text: %w", err)
 	}
@@ -225,7 +258,8 @@ func (c *Classifier) detectWithPreprocessing(img image.Image, rule DecisionRule)
 
 // detectTextOriginal performs the first phase of detection without rotation.
 func (c *Classifier) detectTextOriginal(imageData []byte, scaleFactor float64, rule DecisionRule) (*ClassifierResult, error) {
-	result, err := c.detectTextSingle(imageData)
+	rule = c.normalizeDecisionRule(rule)
+	result, err := c.detectTextSingle(imageData, rule.OCRParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect text in phase 1: %w", err)
 	}
@@ -276,13 +310,14 @@ func (c *Classifier) tryRotationAngles(preprocessed *image.Gray, scaleFactor flo
 // trySingleRotation attempts OCR at a single rotation angle.
 // Returns the result, and a boolean indicating if early exit should occur.
 func (c *Classifier) trySingleRotation(preprocessed *image.Gray, scaleFactor float64, rule DecisionRule, angle int) (*ClassifierResult, bool) {
+	rule = c.normalizeDecisionRule(rule)
 	rotated := rotateImage(preprocessed, angle)
 	data, err := encodeImage(rotated, "png")
 	if err != nil {
 		return nil, false
 	}
 
-	res, err := c.detectTextSingle(data)
+	res, err := c.detectTextSingle(data, rule.OCRParams)
 	if err != nil {
 		return nil, false
 	}

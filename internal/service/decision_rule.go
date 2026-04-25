@@ -4,13 +4,21 @@ package service
 type DecisionRule struct {
 	MinConfidence float64 // Minimum weighted confidence (0-1)
 	MinTokenCount int     // Minimum token count
+	// OCRParams holds OCR-specific parameters (optional).
+	// If empty defaults will be used: Language="eng+rus", Level=RIL_WORD
+	OCRParams
 }
 
 // GetDefaultDecisionRule returns the default decision criteria.
 func GetDefaultDecisionRule() DecisionRule {
+	level := DefaultPageIteratorLevel
 	return DecisionRule{
 		MinConfidence: 0.66,
 		MinTokenCount: 20,
+		OCRParams: OCRParams{
+			Language: DefaultLanguage,
+			Level:    &level,
+		},
 	}
 }
 

@@ -68,6 +68,13 @@ Content-Type: image/jpeg
 Body: <бинарные данные изображения>
 ```
 
+**Query параметры:**
+
+- `lang` — языки для Tesseract OCR (например, `eng`, `rus`, `eng+rus`). По умолчанию: `eng+rus`
+- `level` — уровень детализации структуры текста (PageIteratorLevel): `RIL_BLOCK`, `RIL_PARA`, `RIL_TEXTLINE`, `RIL_WORD`, `RIL_SYMBOL`. По умолчанию: `RIL_WORD`
+- `confidence_threshold` — минимальный порог уверенности (0-1). По умолчанию: 0.66
+- `min_token_count` — минимальное количество токенов. По умолчанию: 20
+
 **Успешный ответ (200):**
 ```json
 {
@@ -114,6 +121,15 @@ curl -X POST \
   -H "Content-Type: image/jpeg" \
   --data-binary @path/to/image.jpg \
   http://localhost:8080/ocr-classifier/api/v1/classify
+```
+
+**Пример с параметрами:**
+
+```bash
+curl -X POST \
+  -H "Content-Type: image/jpeg" \
+  --data-binary @test/dataset/eng/lightbulb-scheme.jpg \
+  "http://localhost:8080/ocr-classifier/api/v1/classify?lang=eng&level=RIL_WORD&confidence_threshold=0.7&min_token_count=10"
 ```
 
 **Пример c изображением из датасета:**

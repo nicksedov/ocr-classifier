@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/otiai10/gosseract/v2"
 	"ocr-classifier/internal/service"
 )
 
@@ -27,9 +28,29 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// parsePageIteratorLevel parses a string level name to gosseract PageIteratorLevel constant.
+// Accepts names like "RIL_BLOCK", "RIL_PARA", "RIL_TEXTLINE", "RIL_WORD", "RIL_SYMBOL".
+func parsePageIteratorLevel(level string) (gosseract.PageIteratorLevel, error) {
+	switch level {
+	case "RIL_BLOCK", "block":
+		return gosseract.RIL_BLOCK, nil
+	case "RIL_PARA", "para":
+		return gosseract.RIL_PARA, nil
+	case "RIL_TEXTLINE", "textline":
+		return gosseract.RIL_TEXTLINE, nil
+	case "RIL_WORD", "word":
+		return gosseract.RIL_WORD, nil
+	case "RIL_SYMBOL", "symbol":
+		return gosseract.RIL_SYMBOL, nil
+	default:
+		return 0, fmt.Errorf("invalid level: %s", level)
+	}
+}
+
 // Classify processes image classification requests.
 // It accepts POST requests with image/jpeg or image/png content type.
-// Optional query parameters: confidence_threshold (0-1), min_token_count (positive integer).
+// Optional query parameters: confidence_threshold (0-1), min_token_count (positive integer),
+// lang (comma-separated language codes, default: "eng+rus"), level (PageIteratorLevel name).
 func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -72,6 +93,18 @@ func (h *ClassifyHandler) Classify(w http.ResponseWriter, r *http.Request) {
 
 	// Parse query parameters with defaults
 	decisionRule := service.GetDefaultDecisionRule()
+
+	// Parse lang from URL parameter (default: "eng+rus")
+	if lang := r.URL.Query().Get("lang"); lang != "" {
+		decisionRule.Language = lang
+	}
+
+	// Parse level from URL parameter (default: RIL_WORD)
+	if level := r.URL.Query().Get("level"); level != "" {
+		if levelInt, err := parsePageIteratorLevel(level); err == nil {
+			decisionRule.Level = &levelInt
+		}
+	}
 
 	// Parse confidence_threshold from URL parameter
 	if thresholdStr := r.URL.Query().Get("confidence_threshold"); thresholdStr != "" {
