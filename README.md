@@ -41,6 +41,35 @@ go build -o ocr-classifier ./cmd/server
 PORT=3000 ./ocr-classifier
 ```
 
+## Docker
+
+### Сборка образа
+
+```bash
+docker build -t ocr-classifier .
+```
+
+### Запуск контейнера
+
+```bash
+docker run -p 8080:8080 ocr-classifier
+```
+
+### Публикация в docker-репозиторий (localhost:5000)
+
+```bash
+# Пометить образ тегом для локального registry
+docker tag ocr-classifier localhost:5000/ocr-classifier:latest
+
+# Отправить образ в registry
+docker push localhost:5000/ocr-classifier:latest
+```
+
+**Запуск из локального registry:**
+```bash
+docker run -p 8080:8080 localhost:5000/ocr-classifier:latest
+```
+
 ## API
 
 Все эндпоинты находятся под корневым путём `/ocr-classifier/api`.
