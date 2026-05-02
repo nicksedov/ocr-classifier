@@ -66,16 +66,16 @@ func encodeImage(img image.Image, format string) ([]byte, error) {
 }
 
 // preprocessImage applies preprocessing pipeline: scale, grayscale, median blur.
-// Returns (nil, 0) if image is too small to process.
-// Returns (processedImage, scaleFactor) on success.
-func preprocessImage(img image.Image) (*image.Gray, float64) {
+// Returns (nil, 0, 0, 0) if image is too small to process.
+// Returns (processedImage, scaleFactor, width, height) on success.
+func preprocessImage(img image.Image) (*image.Gray, float64, int, int) {
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 	pixels := w * h
 
 	// Skip images with any dimension too small to process
 	if w <= minDimension || h <= minDimension {
-		return nil, 0
+		return nil, 0, 0, 0
 	}
 
 	// Calculate target dimensions and scale factor based on megapixels
@@ -90,7 +90,7 @@ func preprocessImage(img image.Image) (*image.Gray, float64) {
 	// Step 3: Convert to grayscale, light gray (224..255) treated as pure white
 	grayImg := convertToGray(blurred, 224)
 
-	return grayImg, scaleFactor
+	return grayImg, scaleFactor, newW, newH
 }
 
 // calculateScaleDimensions determines target dimensions based on megapixel thresholds.

@@ -48,6 +48,8 @@ type ClassifierResult struct {
 	Angle              int           `json:"angle"`
 	ScaleFactor        float64       `json:"scale_factor"`
 	IsTextDocument     bool          `json:"is_text_document"`
+	BoundingBoxWidth   int           `json:"bounding_box_width"`
+	BoundingBoxHeight  int           `json:"bounding_box_height"`
 }
 
 // Classifier performs OCR-based text detection on images.
@@ -88,19 +90,19 @@ func (c *Classifier) detectTextSingle(imageData []byte, params OCRParams) (*Clas
 		return nil, fmt.Errorf("failed to get bounding boxes: %w", err)
 	}
 
-	return c.processBoundingBoxes(boxes)
+	return c.processBoundingBoxes(boxes, client.ImageWidth(), client.ImageHeight())
 }
 
 // processBoundingBoxes processes raw OCR bounding boxes and calculates confidence metrics.
-func (c *Classifier) processBoundingBoxes(boxes []gosseract.BoundingBox) (*ClassifierResult, error) {
+func (c *Classifier) processBoundingBoxes(boxes []gosseract.BoundingBox, imgWidth, imgHeight int) (*ClassifierResult, error) {
 	if len(boxes) == 0 {
-		return &ClassifierResult{IsTextDocument: false}, nil
+		return &ClassifierResult{IsTextDocument: false, BoundingBoxWidth: imgWidth, BoundingBoxHeight: imgHeight}, nil
 	}
 
 	resultBoxes, totalTokens := c.filterAndConvertBoxes(boxes)
 
 	if len(resultBoxes) == 0 {
-		return &ClassifierResult{IsTextDocument: false}, nil
+		return &ClassifierResult{IsTextDocument: false, BoundingBoxWidth: imgWidth, BoundingBoxHeight: imgHeight}, nil
 	}
 
 	meanConfidence, weightedConfidence := c.calculateConfidenceMetrics(resultBoxes, totalTokens)
@@ -111,6 +113,8 @@ func (c *Classifier) processBoundingBoxes(boxes []gosseract.BoundingBox) (*Class
 		TokenCount:         totalTokens,
 		Boxes:              resultBoxes,
 		Angle:              0,
+		BoundingBoxWidth:   imgWidth,
+		BoundingBoxHeight:  imgHeight,
 	}, nil
 }
 
@@ -234,7 +238,7 @@ func (c *Classifier) detectWithoutPreprocessing(imageData []byte, rule DecisionR
 
 // detectWithPreprocessing performs OCR with image preprocessing and rotation detection.
 func (c *Classifier) detectWithPreprocessing(img image.Image, rule DecisionRule) (*ClassifierResult, error) {
-	preprocessed, scaleFactor := preprocessImage(img)
+	preprocessed, scaleFactor, imgWidth, imgHeight := preprocessImage(img)
 	if preprocessed == nil {
 		return &ClassifierResult{IsTextDocument: false}, nil
 	}
@@ -244,7 +248,7 @@ func (c *Classifier) detectWithPreprocessing(img image.Image, rule DecisionRule)
 		return nil, fmt.Errorf("failed to encode preprocessed image: %w", err)
 	}
 
-	result, err := c.detectTextOriginal(preprocessedData, scaleFactor, rule)
+	result, err := c.detectTextOriginal(preprocessedData, scaleFactor, rule, imgWidth, imgHeight)
 	if err != nil {
 		return nil, err
 	}
@@ -253,11 +257,11 @@ func (c *Classifier) detectWithPreprocessing(img image.Image, rule DecisionRule)
 		return result, nil
 	}
 
-	return c.detectTextWithRotations(preprocessed, scaleFactor, result, rule)
+	return c.detectTextWithRotations(preprocessed, scaleFactor, result, rule, imgWidth, imgHeight)
 }
 
 // detectTextOriginal performs the first phase of detection without rotation.
-func (c *Classifier) detectTextOriginal(imageData []byte, scaleFactor float64, rule DecisionRule) (*ClassifierResult, error) {
+func (c *Classifier) detectTextOriginal(imageData []byte, scaleFactor float64, rule DecisionRule, imgWidth, imgHeight int) (*ClassifierResult, error) {
 	rule = c.normalizeDecisionRule(rule)
 	result, err := c.detectTextSingle(imageData, rule.OCRParams)
 	if err != nil {
@@ -266,6 +270,8 @@ func (c *Classifier) detectTextOriginal(imageData []byte, scaleFactor float64, r
 
 	result.Angle = 0
 	result.ScaleFactor = scaleFactor
+	result.BoundingBoxWidth = imgWidth
+	result.BoundingBoxHeight = imgHeight
 	result.IsTextDocument = EvaluateDecision(result.WeightedConfidence, result.TokenCount, rule)
 
 	return result, nil
@@ -273,7 +279,7 @@ func (c *Classifier) detectTextOriginal(imageData []byte, scaleFactor float64, r
 
 // detectTextWithRotations attempts OCR at multiple rotation angles to find the best text detection.
 // It uses candidate angles detected via Canny edge detection and Hough Line Transform.
-func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, rule DecisionRule) (*ClassifierResult, error) {
+func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFactor float64, phase1Result *ClassifierResult, rule DecisionRule, imgWidth, imgHeight int) (*ClassifierResult, error) {
 	candidateAngles := detectSkewAngle(preprocessed)
 
 	if len(candidateAngles) == 0 {
@@ -281,11 +287,11 @@ func (c *Classifier) detectTextWithRotations(preprocessed *image.Gray, scaleFact
 		return phase1Result, nil
 	}
 
-	return c.tryRotationAngles(preprocessed, scaleFactor, phase1Result, rule, candidateAngles)
+	return c.tryRotationAngles(preprocessed, scaleFactor, phase1Result, rule, candidateAngles, imgWidth, imgHeight)
 }
 
 // tryRotationAngles attempts OCR at each candidate angle and returns the best result.
-func (c *Classifier) tryRotationAngles(preprocessed *image.Gray, scaleFactor float64, currentBest *ClassifierResult, rule DecisionRule, angles []int) (*ClassifierResult, error) {
+func (c *Classifier) tryRotationAngles(preprocessed *image.Gray, scaleFactor float64, currentBest *ClassifierResult, rule DecisionRule, angles []int, imgWidth, imgHeight int) (*ClassifierResult, error) {
 	bestResult := currentBest
 
 	for _, angle := range angles {
@@ -293,7 +299,7 @@ func (c *Classifier) tryRotationAngles(preprocessed *image.Gray, scaleFactor flo
 			continue
 		}
 
-		result, shouldReturn := c.trySingleRotation(preprocessed, scaleFactor, rule, angle)
+		result, shouldReturn := c.trySingleRotation(preprocessed, scaleFactor, rule, angle, imgWidth, imgHeight)
 		if shouldReturn && result != nil {
 			return result, nil
 		}
@@ -309,7 +315,7 @@ func (c *Classifier) tryRotationAngles(preprocessed *image.Gray, scaleFactor flo
 
 // trySingleRotation attempts OCR at a single rotation angle.
 // Returns the result, and a boolean indicating if early exit should occur.
-func (c *Classifier) trySingleRotation(preprocessed *image.Gray, scaleFactor float64, rule DecisionRule, angle int) (*ClassifierResult, bool) {
+func (c *Classifier) trySingleRotation(preprocessed *image.Gray, scaleFactor float64, rule DecisionRule, angle int, imgWidth, imgHeight int) (*ClassifierResult, bool) {
 	rule = c.normalizeDecisionRule(rule)
 	rotated := rotateImage(preprocessed, angle)
 	data, err := encodeImage(rotated, "png")
@@ -324,6 +330,8 @@ func (c *Classifier) trySingleRotation(preprocessed *image.Gray, scaleFactor flo
 
 	res.Angle = angle
 	res.ScaleFactor = scaleFactor
+	res.BoundingBoxWidth = imgWidth
+	res.BoundingBoxHeight = imgHeight
 
 	if EvaluateDecision(res.WeightedConfidence, res.TokenCount, rule) {
 		res.IsTextDocument = true

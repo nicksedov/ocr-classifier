@@ -185,7 +185,9 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
   ],
   "angle": 0,
   "scale_factor": 1.0,
-  "is_text_document": true
+  "is_text_document": true,
+  "bounding_box_width": 800,
+  "bounding_box_height": 600
 }</code></pre>
 
         <h3>Параметры ответа</h3>
@@ -229,6 +231,16 @@ Body: &lt;бинарные данные изображения&gt;</code></pre>
                 <td><code>is_text_document</code></td>
                 <td>boolean</td>
                 <td>Вердикт: является ли документ текстовым (true если weighted_confidence >= confidence_threshold И token_count >= min_token_count)</td>
+            </tr>
+            <tr>
+                <td><code>bounding_box_width</code></td>
+                <td>int</td>
+                <td>Ширина изображения в пикселях после применения предобработки (масштабирование и поворот)</td>
+            </tr>
+            <tr>
+                <td><code>bounding_box_height</code></td>
+                <td>int</td>
+                <td>Высота изображения в пикселях после применения предобработки (масштабирование и поворот)</td>
             </tr>
         </table>
 

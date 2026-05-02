@@ -144,6 +144,8 @@ paths:
                 angle: 0
                 scale_factor: 1.0
                 is_text_document: true
+                bounding_box_width: 800
+                bounding_box_height: 600
         '400':
           description: Неверный Content-Type, пустое изображение или ошибка чтения данных
           content:
@@ -193,6 +195,8 @@ components:
         - angle
         - scale_factor
         - is_text_document
+        - bounding_box_width
+        - bounding_box_height
       properties:
         mean_confidence:
           type: number
@@ -234,6 +238,20 @@ components:
             Вердикт: является ли документ текстовым (true если weighted_confidence >= confidence_threshold
             И token_count >= min_token_count)
           example: true
+        bounding_box_width:
+          type: integer
+          format: int32
+          description: |
+            Ширина изображения в пикселях после применения предобработки (масштабирование и поворот).
+            Возвращается всегда, независимо от результата OCR.
+          example: 800
+        bounding_box_height:
+          type: integer
+          format: int32
+          description: |
+            Высота изображения в пикселях после применения предобработки (масштабирование и поворот).
+            Возвращается всегда, независимо от результата OCR.
+          example: 600
 
     BoundingBox:
       type: object
