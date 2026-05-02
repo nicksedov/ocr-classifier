@@ -90,7 +90,16 @@ func (c *Classifier) detectTextSingle(imageData []byte, params OCRParams) (*Clas
 		return nil, fmt.Errorf("failed to get bounding boxes: %w", err)
 	}
 
-	return c.processBoundingBoxes(boxes, client.ImageWidth(), client.ImageHeight())
+	// Decode image to get dimensions (gosseract does not expose ImageWidth/ImageHeight in v2)
+	img, _, err := image.Decode(bytes.NewReader(imageData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image for dimensions: %w", err)
+	}
+	bounds := img.Bounds()
+	imgWidth := bounds.Dx()
+	imgHeight := bounds.Dy()
+
+	return c.processBoundingBoxes(boxes, imgWidth, imgHeight)
 }
 
 // processBoundingBoxes processes raw OCR bounding boxes and calculates confidence metrics.
