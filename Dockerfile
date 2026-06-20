@@ -1,5 +1,5 @@
 # ====== Build Stage ======
-FROM golang:1.26.4-alpine3.24 AS builder
+FROM golang:1.26.4-alpine AS builder
 
 # Install build dependencies
 RUN apk update && apk add --no-cache git gcc g++
