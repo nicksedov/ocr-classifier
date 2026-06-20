@@ -25,6 +25,8 @@ RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-w -s" -o ocr-classifier ./cmd/s
 # ====== Runtime Stage ======
 FROM alpine:3.24
 
+ARG OCR_PORT=8080
+
 # Install runtime dependencies (Tesseract + Leptonica + language packs + C lib)
 # Alpine 3.24 uses tesseract-ocr package with tesseract-ocr-lang-* for language packs
 RUN apk update && apk add --no-cache tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-rus libstdc++ ca-certificates
@@ -45,7 +47,7 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose port (default 8080, configurable via OCR_PORT env)
-ENV OCR_PORT=8080
+ENV OCR_PORT=${OCR_PORT}
 EXPOSE ${OCR_PORT}
 
 # Health check
