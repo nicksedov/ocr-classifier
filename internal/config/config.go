@@ -10,9 +10,9 @@ type Config struct {
 }
 
 // Load loads configuration from environment variables.
-// Defaults to port 8080 if PORT is not set.
+// Defaults to port 8080 if OCR_PORT is not set.
 func Load() *Config {
-	port := os.Getenv("PORT")
+	port := os.Getenv("OCR_PORT")
 	if port == "" {
 		port = "8080"
 	}
