@@ -47,7 +47,7 @@ RUN chown -R appuser:appgroup /app
 USER appuser
 
 # Expose port (default 8080, configurable via OCR_PORT env)
-ENV OCR_PORT=${OCR_PORT}
+ENV PORT=${OCR_PORT}
 EXPOSE ${OCR_PORT}
 
 # Health check
